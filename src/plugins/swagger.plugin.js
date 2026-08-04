@@ -12,8 +12,8 @@ async function swaggerPlugin(fastify) {
   await fastify.register(swagger, {
     openapi: {
       info: {
-        title: 'Grocery App API',
-        description: 'Grocery delivery backend — Fastify API',
+        title: 'Meet Commerce API',
+        description: 'Meet Commerce Backend — Fastify API',
         version: '1.0.0',
       },
       servers: [

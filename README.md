@@ -1,4 +1,4 @@
-# Grocery App — Fastify Backend
+# Meet Commerce — Fastify Backend
 
 ## Prerequisites
 

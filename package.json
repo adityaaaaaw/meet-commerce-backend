@@ -1,7 +1,7 @@
 {
-  "name": "bakaloo-backend",
+  "name": "meet-commerce-backend",
   "version": "1.0.0",
-  "description": "Grocery delivery app — Fastify backend API",
+  "description": "Meet Commerce Backend — Fastify API",
   "type": "module",
   "main": "src/server.js",
   "scripts": {

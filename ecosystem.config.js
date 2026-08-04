@@ -1,7 +1,7 @@
 // PM2 production config
 module.exports = {
   apps: [{
-    name:               'grocery-api',
+    name:               'meet-commerce-api',
     script:             './src/server.js',
     instances:          2,
     exec_mode:          'cluster',

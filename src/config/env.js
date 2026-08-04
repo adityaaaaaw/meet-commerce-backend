@@ -19,7 +19,7 @@ const envSchema = z.object({
   PORT: z.coerce.number().default(4500),
   HOST: z.string().default('0.0.0.0'),
   API_VERSION: z.string().default('v1'),
-  APP_NAME: z.string().default('GroceryApp'),
+  APP_NAME: z.string().default('Meet Commerce'),
   FRONTEND_URL: z.string().url().optional(),
   ADMIN_URL: z.string().url().optional(),
   CORS_ORIGINS: z.string().default('http://localhost:4501,http://localhost:3001,http://localhost:3002'),
@@ -75,7 +75,7 @@ const envSchema = z.object({
   CLOUDINARY_API_KEY: z.string().optional(),
   CLOUDINARY_API_SECRET: z.string().optional(),
   CLOUDINARY_UPLOAD_PRESET: z.string().optional(),
-  CLOUDINARY_FOLDER: z.string().default('grocery-app'),
+  CLOUDINARY_FOLDER: z.string().default('meet-commerce'),
 
   // Rate Limiting
   RATE_LIMIT_ENABLED: booleanFromEnv.default(true),
