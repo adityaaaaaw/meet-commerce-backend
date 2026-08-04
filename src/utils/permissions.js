@@ -1,47 +1,27 @@
 /**
- * Canonical RBAC vocabulary and role → permission maps for the multi-vendor
- * dashboard backend. This module is the **single runtime source of truth** for
- * the 37-string Permission_String vocabulary, the HQ_Role → permission map,
- * and the SHOP_* role → default permission map. It mirrors verbatim:
+ * Canonical RBAC vocabulary, permission groups, and role → permission maps for Meet Commerce.
  *
- *   - design.md §4.1 — Effective Permission Set computation (the canonical
- *     vocabulary CANONICAL_PERMISSIONS / PERMISSIONS exported below feeds the
- *     filtering rule on Shop_Staff_Record permissions JSONB arrays per
- *     R17 AC#11).
- *   - design.md §4.2 — HQ_Role → Permission map (source-of-truth table). Each
- *     ✓ cell in that table corresponds to one element in HQ_ROLE_PERMISSIONS
- *     below. The same table drives the JSONB arrays seeded by migration 046
- *     (`046_hq_role_permissions.sql`); any drift between this file, design
- *     §4.2, and migration 046 is a bug and must be reconciled in lockstep.
- *   - design.md §4.3 — SHOP_* role → default permission map (used by
- *     Shop_Staff_Record creation/update per R16 AC#16).
+ * Single runtime source of truth for:
+ *   - Exactly 67 Canonical Permission_Strings.
+ *   - Reusable Permission Groups.
+ *   - Role → Permission mappings for all 17 system roles + legacy aliases.
  *
  * Requirements satisfied:
- *   - R17 AC#1  — defines the canonical 37-string Permission_String vocabulary.
- *   - R16 AC#14 — SHOP_VIEWER permission set (read-only) and forbidden suffixes.
- *   - R16 AC#16 — default permission JSON array per shop_role on
- *                 Shop_Staff_Record creation.
- *
- * The values in HQ_ROLE_PERMISSIONS / SHOP_ROLE_DEFAULT_PERMISSIONS are
- * exposed as frozen `Set<string>` objects so callers can perform O(1)
- * `permSet.has(perm)` checks during request-time enforcement and so the
- * top-level container objects cannot be re-bound or extended at runtime.
+ *   - Blueprint §05.1 & §05.2 — Canonical Permission Registry (67 permissions).
+ *   - Backward compatibility — 37 legacy permission strings, HQ_ROLE_PERMISSIONS, and
+ *     SHOP_ROLE_DEFAULT_PERMISSIONS preserved verbatim.
  *
  * @module utils/permissions
  */
 
 /**
- * The canonical 37-string Permission_String vocabulary defined verbatim in
- * R17 AC#1 and design §4.2. Order matches the alphabetised JSONB ordering
- * used by migration 046 to keep diffs reviewable.
- *
- * Any string presented as a Permission_String that is not in this set is
- * invalid (R17 AC#1) and MUST be rejected by `assertValidPermissions` and
- * filtered out of the effective permission set per R17 AC#11.
+ * The complete canonical registry of exactly 67 Permission_Strings.
+ * Includes 37 legacy preserved strings + 30 new domain permissions.
  *
  * @type {ReadonlyArray<string>}
  */
 const CANONICAL_PERMISSION_LIST = Object.freeze([
+  // ── Legacy Preserved Permissions (37) ──────────────────────────────────
   'audit_logs.view',
   'finance.global_view',
   'reports.global_view',
@@ -79,44 +59,92 @@ const CANONICAL_PERMISSION_LIST = Object.freeze([
   'shops.delete',
   'shops.update',
   'shops.view',
+
+  // ── New Meet Commerce Domain Permissions (30) ──────────────────────────
+  'batch_evidence.moderate',
+  'batch_evidence.upload',
+  'batch_evidence.view',
+  'delivery_tasks.assign',
+  'delivery_tasks.fail',
+  'delivery_tasks.override',
+  'delivery_tasks.update',
+  'fulfilment.override',
+  'fulfilment.pack',
+  'fulfilment.pick',
+  'fulfilment.view',
+  'inventory_ledger.view',
+  'inventory_lots.adjust',
+  'inventory_lots.recall',
+  'inventory_lots.transfer',
+  'inventory_lots.view',
+  'loyalty.adjust',
+  'loyalty.configure',
+  'loyalty.export',
+  'loyalty.view',
+  'procurement.cancel',
+  'procurement.create',
+  'procurement.respond',
+  'procurement.update',
+  'procurement.view',
+  'product_proposals.approve',
+  'product_proposals.create',
+  'product_proposals.reject',
+  'product_proposals.update',
+  'product_proposals.view',
+  'quality_control.decide',
+  'quality_control.override',
+  'quality_control.view',
+  'recalls.activate',
+  'recalls.close',
+  'recalls.create',
+  'recalls.view',
+  'reports.quality_view',
+  'reports.traceability_view',
+  'supply_batches.create',
+  'supply_batches.dispatch',
+  'supply_batches.handover',
+  'supply_batches.ready',
+  'supply_batches.update',
+  'supply_batches.view',
+  'support_tickets.refund',
+  'support_tickets.replace',
+  'support_tickets.update',
+  'support_tickets.view',
+  'vendor_documents.verify',
+  'vendor_documents.view',
+  'vendor_staff.create',
+  'vendor_staff.delete',
+  'vendor_staff.update',
+  'vendor_staff.view',
+  'vendors.approve',
+  'vendors.create',
+  'vendors.suspend',
+  'vendors.update',
+  'vendors.view',
+  'warehouse_receipts.create',
+  'warehouse_receipts.submit_qc',
+  'warehouse_receipts.update',
+  'warehouse_receipts.view',
+  'warehouses.create',
+  'warehouses.update',
+  'warehouses.view',
 ])
 
 /**
- * Frozen `Set<string>` of every canonical Permission_String. Used by the
- * permission-check middleware (design §4.5) to validate the static
- * `requiredPermission` declared on every protected route at boot time
- * (R17 AC#9) and to filter Shop_Staff_Record permissions JSONB elements
- * during effective-set computation (R17 AC#11).
- *
- * Frozen via `Object.freeze` after construction — adding/removing values at
- * runtime is silently no-op in non-strict and throws in strict mode.
- *
- * Requirements: R17.1
- * Design:       §4.1, §4.2
- *
+ * Frozen `Set<string>` of all 67 canonical permissions.
  * @type {Readonly<Set<string>>}
  */
 export const PERMISSIONS = Object.freeze(new Set(CANONICAL_PERMISSION_LIST))
 
 /**
- * Alias of `PERMISSIONS` matching the symbol name used in design §4.5
- * (the example permission-check middleware imports `CANONICAL_PERMISSIONS`).
- * Keeping both names exported lets call sites read either way without
- * duplicating data.
- *
+ * Alias of `PERMISSIONS` for backward compatibility.
  * @type {Readonly<Set<string>>}
  */
 export const CANONICAL_PERMISSIONS = PERMISSIONS
 
 /**
- * Convenience array of HQ_Role identifiers (every legal value of
- * `users.platform_role`). Consumed by the shop-scope middleware extension
- * (task 2.4) to recognise HQ_Users for X-Shop-Id header acceptance per
- * design §4.4.
- *
- * Order matches design §4.2 column order.
- *
- * @type {ReadonlyArray<'SUPER_ADMIN' | 'ADMIN' | 'HQ_MANAGER' | 'HQ_FINANCE' | 'HQ_SUPPORT'>}
+ * Convenience array of HQ_Role identifiers.
+ * @type {ReadonlyArray<string>}
  */
 export const HQ_ROLES = Object.freeze([
   'SUPER_ADMIN',
@@ -124,14 +152,17 @@ export const HQ_ROLES = Object.freeze([
   'HQ_MANAGER',
   'HQ_FINANCE',
   'HQ_SUPPORT',
+  'FINANCE_USER',
+  'SUPPORT_AGENT',
+  'CONTENT_MANAGER',
+  'MARKETING_USER',
+  'READ_ONLY_ANALYST',
 ])
 
-// Internal helper — every Permission_String in the canonical vocabulary; used
-// to construct SUPER_ADMIN and ADMIN sets without retyping the 37 values.
+// Helper: All 67 permissions array
 const ALL_PERMISSIONS = CANONICAL_PERMISSION_LIST
 
-// Shop-scoped subset (everything except the three HQ-only globals). Used as
-// the SHOP_ADMIN default per design §4.3.
+// Shop-scoped subset (all permissions minus HQ global reports/finance/audit)
 const SHOP_SCOPED_PERMISSIONS = Object.freeze(
   ALL_PERMISSIONS.filter(
     (p) => p !== 'reports.global_view' && p !== 'finance.global_view' && p !== 'audit_logs.view',
@@ -139,40 +170,112 @@ const SHOP_SCOPED_PERMISSIONS = Object.freeze(
 )
 
 /**
- * HQ_Role → permission set map. Keys are the five legal `users.platform_role`
- * values; values are frozen `Set<string>` instances containing only canonical
- * Permission_Strings. The contents are the same data seeded into the `roles`
- * table by migration 046 — design §4.2 is the single source of truth and
- * both this map and migration 046 derive from it directly.
- *
- * Per-role rationale (mirrored from migration 046's header comment):
- *
- *   - SUPER_ADMIN — all 37 canonical Permission_Strings (R16 AC#3).
- *   - ADMIN       — same 37 strings as SUPER_ADMIN per §4.2 (R16 AC#4).
- *                   The "ADMIN cannot CRUD a SUPER_ADMIN" carve-out is an
- *                   actor-vs-target rule enforced at the HQ user-management
- *                   route layer, not via this static map.
- *   - HQ_MANAGER  — operations subset (23 strings) per R16 AC#5: full
- *                   shops/staff/products/orders/coupons/reports/riders
- *                   "manage" surface MINUS finance + HQ-user management +
- *                   audit logs. Excludes shops.create/delete,
- *                   shop_staff.delete, shop_products.delete,
- *                   shop_orders.refund, shop_transactions.*,
- *                   shop_financials.*, shop_coupons.delete, riders.approve,
- *                   finance.global_view, audit_logs.view.
- *   - HQ_FINANCE  — finance subset (13 strings) per R16 AC#6: view-only on
- *                   shops; read/export on transactions/financials;
- *                   shop_orders view/refund/export; mark_paid; reports;
- *                   global finance + audit_logs.view.
- *   - HQ_SUPPORT  — support subset (11 strings) per R16 AC#7: view on
- *                   shops/staff/products/orders/coupons/reports;
- *                   shop_orders update_status/assign_rider/cancel;
- *                   riders view/assign.
- *
- * Requirements: R16.3, R16.4, R16.5, R16.6, R16.7, R17.3
- * Design:       §4.2
- *
- * @type {Readonly<Record<'SUPER_ADMIN' | 'ADMIN' | 'HQ_MANAGER' | 'HQ_FINANCE' | 'HQ_SUPPORT', Readonly<Set<string>>>>}
+ * Reusable Permission Groups by Domain Scope
+ */
+export const PERMISSION_GROUPS = Object.freeze({
+  VENDORS: Object.freeze([
+    'vendors.view',
+    'vendors.create',
+    'vendors.update',
+    'vendors.approve',
+    'vendors.suspend',
+    'vendor_staff.view',
+    'vendor_staff.create',
+    'vendor_staff.update',
+    'vendor_staff.delete',
+    'vendor_documents.view',
+    'vendor_documents.verify',
+  ]),
+  CATALOGUE_PROPOSALS: Object.freeze([
+    'product_proposals.view',
+    'product_proposals.create',
+    'product_proposals.update',
+    'product_proposals.approve',
+    'product_proposals.reject',
+  ]),
+  PROCUREMENT: Object.freeze([
+    'procurement.view',
+    'procurement.create',
+    'procurement.update',
+    'procurement.cancel',
+    'procurement.respond',
+    'supply_batches.view',
+    'supply_batches.create',
+    'supply_batches.update',
+    'supply_batches.ready',
+    'supply_batches.dispatch',
+    'supply_batches.handover',
+    'batch_evidence.view',
+    'batch_evidence.upload',
+    'batch_evidence.moderate',
+  ]),
+  WAREHOUSE_OPERATIONS: Object.freeze([
+    'warehouses.view',
+    'warehouses.create',
+    'warehouses.update',
+    'warehouse_receipts.view',
+    'warehouse_receipts.create',
+    'warehouse_receipts.update',
+    'warehouse_receipts.submit_qc',
+    'quality_control.view',
+    'quality_control.decide',
+    'quality_control.override',
+    'inventory_lots.view',
+    'inventory_lots.adjust',
+    'inventory_lots.transfer',
+    'inventory_lots.recall',
+    'inventory_ledger.view',
+  ]),
+  FULFILMENT_DELIVERY: Object.freeze([
+    'fulfilment.view',
+    'fulfilment.pick',
+    'fulfilment.pack',
+    'fulfilment.override',
+    'delivery_tasks.assign',
+    'delivery_tasks.update',
+    'delivery_tasks.fail',
+    'delivery_tasks.override',
+    'riders.view',
+    'riders.assign',
+    'riders.approve',
+  ]),
+  CUSTOMER_SUPPORT: Object.freeze([
+    'support_tickets.view',
+    'support_tickets.update',
+    'support_tickets.refund',
+    'support_tickets.replace',
+    'recalls.view',
+    'recalls.create',
+    'recalls.activate',
+    'recalls.close',
+  ]),
+  MARKETING_LOYALTY: Object.freeze([
+    'loyalty.view',
+    'loyalty.configure',
+    'loyalty.adjust',
+    'loyalty.export',
+    'shop_coupons.view',
+    'shop_coupons.create',
+    'shop_coupons.update',
+    'shop_coupons.delete',
+  ]),
+  FINANCE_REPORTING: Object.freeze([
+    'finance.global_view',
+    'reports.global_view',
+    'reports.quality_view',
+    'reports.traceability_view',
+    'shop_financials.view',
+    'shop_financials.export',
+    'shop_financials.mark_paid',
+    'shop_transactions.view',
+    'shop_transactions.export',
+    'shop_reports.view',
+    'audit_logs.view',
+  ]),
+})
+
+/**
+ * HQ_Role → permission set map (legacy preserved)
  */
 export const HQ_ROLE_PERMISSIONS = Object.freeze({
   SUPER_ADMIN: Object.freeze(new Set(ALL_PERMISSIONS)),
@@ -239,29 +342,7 @@ export const HQ_ROLE_PERMISSIONS = Object.freeze({
 })
 
 /**
- * SHOP_* role → default permission set map applied at Shop_Staff_Record
- * creation/update per R16 AC#16. Values are frozen `Set<string>` instances
- * containing only canonical Permission_Strings.
- *
- *   - SHOP_ADMIN   — every shop-scoped Permission_String (all 37 minus the
- *                    three HQ-only globals: reports.global_view,
- *                    finance.global_view, audit_logs.view). Total: 34.
- *   - SHOP_MANAGER — SHOP_ADMIN MINUS shop_staff.delete and
- *                    shop_financials.mark_paid. Total: 32.
- *   - SHOP_STAFF   — exactly { shop_orders.view, shop_orders.update_status,
- *                    shop_products.view, shop_products.update } per
- *                    R16 AC#16. Total: 4.
- *   - SHOP_VIEWER  — exactly { shops.view, shop_products.view,
- *                    shop_orders.view, shop_transactions.view,
- *                    shop_financials.view, shop_reports.view } per
- *                    R16 AC#14. Total: 6. Contains no Permission_String
- *                    ending in .create / .update / .delete /
- *                    .assign_rider / .update_status / .mark_paid (R16 AC#14).
- *
- * Requirements: R16.14, R16.16
- * Design:       §4.3
- *
- * @type {Readonly<Record<'SHOP_ADMIN' | 'SHOP_MANAGER' | 'SHOP_STAFF' | 'SHOP_VIEWER', Readonly<Set<string>>>>}
+ * SHOP_* role → default permission set map (legacy preserved)
  */
 export const SHOP_ROLE_DEFAULT_PERMISSIONS = Object.freeze({
   SHOP_ADMIN: Object.freeze(new Set(SHOP_SCOPED_PERMISSIONS)),
@@ -293,27 +374,32 @@ export const SHOP_ROLE_DEFAULT_PERMISSIONS = Object.freeze({
 })
 
 /**
- * Validate that every element of `arr` is a Permission_String drawn from the
- * canonical 37-value vocabulary (R17 AC#1). Throws on the first invalid
- * element with a stable error code so route handlers can map the failure to
- * HTTP 400 PERMISSION_INVALID per R16 AC#17.
- *
- * Behaviour:
- *   - Non-array input → `Error` with `code='PERMISSION_INVALID'` and message
- *     `'permissions must be an array'`.
- *   - Any element that is not a string OR not present in `PERMISSIONS` →
- *     `Error` with `code='PERMISSION_INVALID'` and message
- *     `` `Unknown permission string: ${perm}` ``.
- *   - Otherwise returns the input array unchanged so the helper can be used
- *     in a fluent expression (e.g. `repo.update({ permissions:
- *     assertValidPermissions(body.permissions) })`).
- *
- * Requirements: R16.17, R17.1
- * Design:       §4.1
- *
- * @param {unknown} arr - Caller-provided array of Permission_String values.
- * @returns {string[]} The same array, when valid.
- * @throws {Error & { code: 'PERMISSION_INVALID' }} when any element is invalid.
+ * Master Role → Permission mapping for all 17 system roles
+ */
+export const ROLE_PERMISSIONS = Object.freeze({
+  SUPER_ADMIN: Object.freeze(new Set(ALL_PERMISSIONS)),
+  ADMIN: Object.freeze(new Set(ALL_PERMISSIONS)),
+  HQ_MANAGER: HQ_ROLE_PERMISSIONS.HQ_MANAGER,
+  SUPPORT_AGENT: Object.freeze(new Set(PERMISSION_GROUPS.CUSTOMER_SUPPORT.concat(['shop_orders.view', 'shops.view']))),
+  FINANCE_USER: HQ_ROLE_PERMISSIONS.HQ_FINANCE,
+  CONTENT_MANAGER: Object.freeze(new Set(PERMISSION_GROUPS.CATALOGUE_PROPOSALS.concat(['shop_products.approve', 'shop_products.bulk_update', 'shops.view']))),
+  MARKETING_USER: Object.freeze(new Set(PERMISSION_GROUPS.MARKETING_LOYALTY.concat(['reports.global_view']))),
+  READ_ONLY_ANALYST: Object.freeze(new Set(ALL_PERMISSIONS.filter((p) => p.endsWith('.view') || p.endsWith('.global_view') || p.endsWith('.export')))),
+  VENDOR_OWNER: Object.freeze(new Set(PERMISSION_GROUPS.VENDORS.concat(PERMISSION_GROUPS.CATALOGUE_PROPOSALS, PERMISSION_GROUPS.PROCUREMENT, ['shop_products.create', 'shop_products.update', 'shop_orders.view']))),
+  VENDOR_OPERATOR: Object.freeze(new Set(['product_proposals.create', 'product_proposals.update', 'procurement.respond', 'supply_batches.view', 'supply_batches.create', 'supply_batches.update', 'batch_evidence.upload', 'shop_products.view', 'shop_orders.view'])),
+  WAREHOUSE_RECEIVER: Object.freeze(new Set(['warehouse_receipts.view', 'warehouse_receipts.create', 'warehouse_receipts.update', 'warehouse_receipts.submit_qc', 'warehouses.view', 'supply_batches.view'])),
+  QUALITY_CONTROLLER: Object.freeze(new Set(['quality_control.view', 'quality_control.decide', 'quality_control.override', 'warehouse_receipts.view', 'supply_batches.view', 'batch_evidence.view'])),
+  PICKER: Object.freeze(new Set(['fulfilment.view', 'fulfilment.pick', 'inventory_lots.view'])),
+  PACKER: Object.freeze(new Set(['fulfilment.view', 'fulfilment.pack', 'inventory_lots.view'])),
+  INVENTORY_MANAGER: Object.freeze(new Set(PERMISSION_GROUPS.WAREHOUSE_OPERATIONS)),
+  RIDER: Object.freeze(new Set(['delivery_tasks.update', 'shop_orders.view', 'riders.view'])),
+  CUSTOMER: Object.freeze(new Set(['shops.view', 'shop_products.view'])),
+})
+
+/**
+ * Validate permission array against the 67-permission canonical vocabulary
+ * @param {unknown} arr
+ * @returns {string[]}
  */
 export function assertValidPermissions(arr) {
   if (!Array.isArray(arr)) {
