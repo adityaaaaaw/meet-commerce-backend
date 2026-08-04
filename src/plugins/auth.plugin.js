@@ -3,8 +3,10 @@ import fjwt from '@fastify/jwt'
 import cookie from '@fastify/cookie'
 import { env } from '../config/env.js'
 import { query } from '../config/database.js'
-import { ERROR_CODES } from '../constants/errors.js'
+import { ERROR_CODES, HTTP_STATUS } from '../constants/errors.js'
 import { logger } from '../config/logger.js'
+import { ROLE_PERMISSIONS } from '../utils/permissions.js'
+import { isSessionActive } from '../utils/session.js'
 
 /**
  * Auth plugin — registers JWT + Cookie support
@@ -31,62 +33,37 @@ async function authPlugin(fastify) {
 
   /**
    * preHandler: Verify JWT from Authorization header or cookie.
-   *
-   * Pipeline (per multi-vendor design §5.5, R20.8):
-   *   1. `request.jwtVerify()` — validates signature + expiry, populates
-   *      `request.user` with the token payload.
-   *   2. Single parameterized SELECT against `users` to fetch
-   *      `is_blocked` and `session_version` in one round-trip (PK
-   *      lookup, well under the <50ms p95 DB budget).
-   *   3. Reject blocked accounts with 403 ACCOUNT_BLOCKED.
-   *   4. Compare the JWT-encoded `session_version` against
-   *      `users.session_version`. Mismatch → 401 SESSION_INVALID.
-   *      Change-password (auth.service.js#changePassword, task 3.5)
-   *      atomically increments the row, so every previously issued JWT
-   *      for the user becomes invalid the moment the transaction
-   *      commits. Login / select-shop / change-password (tasks 3.2,
-   *      3.3, 3.5) mint tokens with the current row value.
-   *
-   * Backward compatibility (R20.8 migration safety):
-   *   Tokens issued before migration 047 carry no `session_version`
-   *   claim. When `STRICT_SESSION_VERSION_CHECK=false` (the default
-   *   until live tokens have rotated) those tokens are accepted
-   *   without comparison. When the env flag is `true` the missing
-   *   claim is treated as a violation and rejected with 401
-   *   SESSION_INVALID — flip the flag once Phase C is live and all
-   *   in-flight tokens carry the claim.
-   *
-   * @see Requirements: R20.8
-   * @see Design: §5.5
    */
   fastify.decorate('authenticate', async function (request, reply) {
     try {
       await request.jwtVerify()
 
+      const userId = request.user.id
+      if (!userId) {
+        return reply.code(401).send({
+          success: false,
+          message: 'Unauthorized — invalid token payload',
+          code: ERROR_CODES.UNAUTHORIZED,
+        })
+      }
+
       // Single PK lookup fetches both gates in one round-trip.
       const { rows } = await query(
-        'SELECT is_blocked, session_version FROM users WHERE id = $1 LIMIT 1',
-        [request.user.id]
+        'SELECT is_blocked, session_version, platform_role FROM users WHERE id = $1 LIMIT 1',
+        [userId]
       )
 
-      // Daily-active-customer stamp — fire-and-forget (never awaited) and
-      // throttled at the SQL level (skip if stamped within the last 10
-      // minutes) so this doesn't turn into a write on every single
-      // authenticated request platform-wide. Wrapped in a synchronous
-      // try/catch (not just a trailing .catch()) because `query()` isn't
-      // guaranteed to return a thenable in every context this decorator
-      // runs in — this must never affect the auth decision or add latency
-      // to the request it's riding on.
+      // Daily-active-customer stamp — fire-and-forget
       try {
         query(
           `UPDATE users SET last_active_at = NOW()
            WHERE id = $1 AND (last_active_at IS NULL OR last_active_at < NOW() - INTERVAL '10 minutes')`,
-          [request.user.id]
+          [userId]
         ).catch((err) => {
-          logger.warn({ err: err.message, userId: request.user.id }, 'last_active_at stamp failed (non-critical)')
+          logger.warn({ err: err.message, userId }, 'last_active_at stamp failed (non-critical)')
         })
       } catch (err) {
-        logger.warn({ err: err.message, userId: request.user.id }, 'last_active_at stamp failed (non-critical)')
+        logger.warn({ err: err.message, userId }, 'last_active_at stamp failed (non-critical)')
       }
 
       // ── 1. Blocked-account gate ─────────────────────────────────
@@ -98,37 +75,60 @@ async function authPlugin(fastify) {
         })
       }
 
-      // ── 2. session_version gate (R20.8, design §5.5) ────────────
-      // The JWT claim is populated by login / select-shop /
-      // change-password. A row miss (deleted user) plus a present
-      // claim is treated as an invalidated session for symmetry with
-      // the row-vs-claim mismatch path; downstream guards already
-      // assume `request.user.id` resolves to a live row.
+      // ── 2. session_version gate ────────────────────────────────
       const jwtSessionVersion = request.user.session_version
-      if (jwtSessionVersion === undefined || jwtSessionVersion === null) {
-        if (env.STRICT_SESSION_VERSION_CHECK) {
+      if (jwtSessionVersion !== undefined && jwtSessionVersion !== null) {
+        const rowSessionVersion = rows[0]?.session_version
+        if (rowSessionVersion !== undefined && rowSessionVersion !== null && rowSessionVersion !== jwtSessionVersion) {
           return reply.code(401).send({
             success: false,
             message: 'Session is no longer valid',
             code: ERROR_CODES.SESSION_INVALID,
           })
         }
-        // Non-strict mode: legacy token without the claim — accept.
-      } else {
-        const rowSessionVersion = rows[0]?.session_version
-        if (rowSessionVersion !== jwtSessionVersion) {
+      } else if (env.STRICT_SESSION_VERSION_CHECK) {
+        return reply.code(401).send({
+          success: false,
+          message: 'Session is no longer valid',
+          code: ERROR_CODES.SESSION_INVALID,
+        })
+      }
+
+      // ── 3. Device session revocation gate ──────────────────────
+      const sessionId = request.user.sessionId || request.user.session_id || null
+      if (sessionId) {
+        const active = await isSessionActive(sessionId)
+        if (!active) {
           return reply.code(401).send({
             success: false,
-            message: 'Session is no longer valid',
+            message: 'Session has been revoked or expired',
             code: ERROR_CODES.SESSION_INVALID,
           })
         }
       }
+
+      // ── 4. Request Context Attachment (Blueprint §05.1) ────────
+      const role = request.user.platform_role || request.user.role || rows[0]?.platform_role || 'CUSTOMER'
+      const permissionsSet = ROLE_PERMISSIONS[role] ? Array.from(ROLE_PERMISSIONS[role]) : []
+
+      request.userId = userId
+      request.roles = [role]
+      request.permissions = permissionsSet
+      request.session = {
+        id: sessionId,
+        version: jwtSessionVersion || rows[0]?.session_version || 1,
+      }
+      request.auth = {
+        authenticated: true,
+        method: 'JWT',
+        userId,
+        role,
+        scopes: {
+          vendorId: request.vendorId || request.user.vendorId || request.user.shopId || null,
+          warehouseId: request.warehouseId || request.user.warehouseId || null,
+        },
+      }
     } catch (err) {
-      // `err.name` distinguishes TokenExpiredError / JsonWebTokenError /
-      // NotBeforeError from unrelated failures (e.g. the DB lookup above
-      // throwing). Logged at warn so production auth failures are
-      // diagnosable without guessing from response timing alone.
       logger.warn(
         { err: err.message, name: err.name, path: request.url },
         'Authenticate preHandler rejected request'
@@ -143,12 +143,10 @@ async function authPlugin(fastify) {
 
   /**
    * preHandler factory: Check if user has one of the allowed roles
-   * Must be used AFTER authenticate
-   * Usage: preHandler: [fastify.authenticate, fastify.authorize(['ADMIN'])]
    */
   fastify.decorate('authorize', function (allowedRoles) {
     return async function (request, reply) {
-      const { role } = request.user
+      const role = request.user?.role || request.user?.platform_role
       if (!allowedRoles.includes(role)) {
         reply.code(403).send({
           success: false,
@@ -161,12 +159,10 @@ async function authPlugin(fastify) {
 
   /**
    * preHandler: Check if user has ADMIN role
-   * Must be used AFTER authenticate
-   * Usage: preHandler: [fastify.authenticate, fastify.requireAdmin]
    */
   fastify.decorate('requireAdmin', async function (request, reply) {
-    const { role } = request.user
-    if (role !== 'ADMIN') {
+    const role = request.user?.role || request.user?.platform_role
+    if (role !== 'ADMIN' && role !== 'SUPER_ADMIN') {
       reply.code(403).send({
         success: false,
         message: 'Forbidden — admin access required',
@@ -177,21 +173,11 @@ async function authPlugin(fastify) {
 
   /**
    * preHandler factory: Check if user has a specific permission via their role
-   * Must be used AFTER authenticate
-   * Usage: preHandler: [fastify.authenticate, fastify.requireAdmin, fastify.requirePermission('products.manage')]
    */
   fastify.decorate('requirePermission', function (permission) {
     return async function (request, reply) {
-      const { id } = request.user
-      const { rows } = await query(
-        `SELECT COALESCE(r.permissions, '[]'::jsonb) AS permissions
-         FROM users u
-         LEFT JOIN roles r ON r.id = u.role_id
-         WHERE u.id = $1`,
-        [id]
-      )
-      const perms = rows[0]?.permissions || []
-      if (!perms.includes(permission)) {
+      const userPerms = request.permissions || []
+      if (!userPerms.includes(permission)) {
         reply.code(403).send({
           success: false,
           message: `Forbidden — requires '${permission}' permission`,
