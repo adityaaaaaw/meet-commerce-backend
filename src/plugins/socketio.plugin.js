@@ -6,6 +6,7 @@ import { logger } from '../config/logger.js'
 import jwt from 'jsonwebtoken'
 import { redis } from '../config/redis.js'
 import { query } from '../config/database.js'
+import { socketAuthMiddleware } from '../socket/auth.js'
 
 const RIDER_LOCATION_PREFIX = 'rider:location:'
 const RIDER_LOCATION_TTL = 300 // 5 minutes
@@ -92,24 +93,7 @@ async function socketioPlugin(fastify) {
   io.adapter(createAdapter(pubClient, subClient))
 
   // ─── AUTH MIDDLEWARE ──────────────────────────────────
-  io.use((socket, next) => {
-    const token =
-      socket.handshake.auth?.token ||
-      socket.handshake.headers?.authorization?.replace('Bearer ', '')
-
-    if (!token) {
-      return next(new Error('Authentication required'))
-    }
-
-    try {
-      const decoded = jwt.verify(token, env.JWT_ACCESS_SECRET)
-      socket.user = decoded // { id, phone, role }
-      next()
-    } catch (err) {
-      logger.warn({ err: err.message }, 'Socket auth failed')
-      next(new Error('Invalid or expired token'))
-    }
-  })
+  io.use(socketAuthMiddleware)
 
   // ─── CONNECTION HANDLER ──────────────────────────────
   io.on('connection', (socket) => {
