@@ -20,6 +20,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import * as fc from 'fast-check'
 
+const FC_SEED = process.env.FAST_CHECK_SEED
+  ? parseInt(process.env.FAST_CHECK_SEED, 10)
+  : process.env.CI
+    ? 42
+    : undefined
+const FC_PARAMS = FC_SEED !== undefined ? { numRuns: 100, seed: FC_SEED } : { numRuns: 100 }
+
 // ─── Mock external dependencies BEFORE importing the service ──
 // mergeAndMarkPrimary is pure compute, but the module imports cache/log/queue
 // at load time. Mock them so tests stay hermetic and don't require Redis.
@@ -142,7 +149,7 @@ describe('Property 5: Allocation Computation — deduplication', () => {
         const ids = result.map((r) => r.shop_id)
         expect(new Set(ids).size).toBe(ids.length)
       }),
-      { numRuns: 100 }
+      FC_PARAMS
     )
   })
 })
@@ -167,7 +174,7 @@ describe('Property 5: Allocation Computation — union', () => {
         const got = new Set(result.map((r) => r.shop_id))
         expect(got).toEqual(expected)
       }),
-      { numRuns: 100 }
+      FC_PARAMS
     )
   })
 })
@@ -258,7 +265,7 @@ describe('Property 5: Allocation Computation — primary selection', () => {
           expect(primary.shop_id).toBe(expectedPrimaryId)
         }
       ),
-      { numRuns: 100 }
+      FC_PARAMS
     )
   })
 })
@@ -284,7 +291,7 @@ describe('Property 5: Allocation Computation — NULL distance ranks last', () =
           expect(primary.distance_km).not.toBeNull()
         }
       }),
-      { numRuns: 100 }
+      FC_PARAMS
     )
   })
 
@@ -343,7 +350,7 @@ describe('Property 5: Allocation Computation — matched_pincode preservation', 
           }
         }
       ),
-      { numRuns: 100 }
+      FC_PARAMS
     )
   })
 })

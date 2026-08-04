@@ -59,6 +59,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import * as fc from 'fast-check'
 
+const FC_SEED = process.env.FAST_CHECK_SEED
+  ? parseInt(process.env.FAST_CHECK_SEED, 10)
+  : process.env.CI
+    ? 42
+    : undefined
+const FC_PARAMS = FC_SEED !== undefined ? { numRuns: 100, seed: FC_SEED } : { numRuns: 100 }
+
 // ─── Mock external dependencies BEFORE importing the SUT ──────────────
 
 vi.mock('../../src/utils/cache.js', () => ({
@@ -378,7 +385,7 @@ describe('Property 2: Product Visibility Invariant — exact set', () => {
           expect(result.pagination.total).toBe(expectedIds.size)
         }
       }),
-      { numRuns: 100 }
+      FC_PARAMS
     )
   })
 })
@@ -413,7 +420,7 @@ describe('Property 2: Product Visibility Invariant — soundness', () => {
           }
         }
       }),
-      { numRuns: 100 }
+      FC_PARAMS
     )
   })
 })
@@ -451,7 +458,7 @@ describe('Property 2: Product Visibility Invariant — completeness', () => {
           }
         }
       }),
-      { numRuns: 100 }
+      FC_PARAMS
     )
   })
 })
@@ -485,7 +492,7 @@ describe('Property 2: Product Visibility Invariant — empty-allocation guard', 
         expect(result.data).toEqual([])
         expect(result.pagination.total).toBe(0)
       }),
-      { numRuns: 100 }
+      FC_PARAMS
     )
   })
 })
