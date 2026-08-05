@@ -1,96 +1,70 @@
-import { OrdersController } from './orders.controller.js'
-import { OrdersService } from './orders.service.js'
-import { OrdersRepository } from './orders.repository.js'
-import {
-  placeOrderSchema,
-  listOrdersSchema,
-  getOrderSchema,
-  activeOrderSchema,
-  cancelOrderSchema,
-  reorderSchema,
-  adminListOrdersSchema,
-  adminUpdateStatusSchema,
-  adminAssignRiderSchema,
-} from './orders.schema.js'
-
 /**
- * Orders routes plugin
- * Prefix: /api/v1/orders
+ * Orders Routes — Fastify Plugin for Orders & Fulfilment Endpoints
+ * Source of truth: Blueprint §06.7, Phase 8
+ *
+ * @module modules/orders/orders.routes
  */
-export default async function ordersRoutes(fastify) {
+
+import { OrdersRepository } from './orders.repository.js'
+import { CartQuoteRepository } from '../cart-quote/cart-quote.repository.js'
+import { OrdersService } from './orders.service.js'
+import { OrdersController } from './orders.controller.js'
+import { CreateOrderFromQuoteSchema, UpdateOrderStatusSchema, CreateFulfilmentTaskSchema, UpdateFulfilmentTaskSchema } from './orders.schema.js'
+
+export async function ordersRoutes(fastify) {
   const repository = new OrdersRepository()
-  const service = new OrdersService(repository, fastify)
+  const quoteRepository = new CartQuoteRepository()
+  const service = new OrdersService(repository, quoteRepository)
   const controller = new OrdersController(service)
 
-  // ─── Customer routes (AUTH) ─────────────────────────────
-
-  // POST / — Place a new order
+  // 1. Create Order from Checkout Quote
   fastify.post('/', {
-    schema: placeOrderSchema,
     preHandler: [fastify.authenticate],
-  }, controller.placeOrder.bind(controller))
+    schema: { body: CreateOrderFromQuoteSchema },
+    handler: controller.createOrderFromQuote,
+  })
 
-  // GET / — List user orders
+  // 2. Transition Order Status (17-State Machine)
+  fastify.patch('/:orderId/status', {
+    preHandler: [
+      fastify.authenticate,
+      fastify.requirePermission('orders.update'),
+    ],
+    schema: { body: UpdateOrderStatusSchema },
+    handler: controller.transitionOrderStatus,
+  })
+
+  // 3. Create Fulfilment Task (Picking / Packing)
+  fastify.post('/:orderId/fulfilment-tasks', {
+    preHandler: [
+      fastify.authenticate,
+      fastify.requirePermission('fulfilment.manage'),
+    ],
+    schema: { body: CreateFulfilmentTaskSchema },
+    handler: controller.createFulfilmentTask,
+  })
+
+  // 4. Update Fulfilment Task Status
+  fastify.patch('/fulfilment-tasks/:taskId', {
+    preHandler: [
+      fastify.authenticate,
+      fastify.requirePermission('fulfilment.manage'),
+    ],
+    schema: { body: UpdateFulfilmentTaskSchema },
+    handler: controller.updateFulfilmentTaskStatus,
+  })
+
+  // 5. Get Order by ID
+  fastify.get('/:orderId', {
+    preHandler: [fastify.authenticate],
+    handler: controller.getOrderById,
+  })
+
+  // 6. List Orders
   fastify.get('/', {
-    schema: listOrdersSchema,
     preHandler: [fastify.authenticate],
-  }, controller.list.bind(controller))
-
-  // GET /active — Get current active order
-  fastify.get('/active', {
-    schema: activeOrderSchema,
-    preHandler: [fastify.authenticate],
-  }, controller.getActive.bind(controller))
-
-  // GET /:id — Get order details
-  fastify.get('/:id', {
-    schema: getOrderSchema,
-    preHandler: [fastify.authenticate],
-  }, controller.getById.bind(controller))
-
-  // POST /:id/cancel — Cancel an order
-  fastify.post('/:id/cancel', {
-    schema: cancelOrderSchema,
-    preHandler: [fastify.authenticate],
-  }, controller.cancel.bind(controller))
-
-  // POST /:id/reorder — Re-order items
-  fastify.post('/:id/reorder', {
-    schema: reorderSchema,
-    preHandler: [fastify.authenticate],
-  }, controller.reorder.bind(controller))
-
-  // GET /:id/invoice — Download PDF invoice
-  fastify.get('/:id/invoice', {
-    schema: {
-      tags: ['Orders'],
-      summary: 'Download order invoice as PDF',
-      params: {
-        type: 'object',
-        required: ['id'],
-        properties: { id: { type: 'string', format: 'uuid' } },
-      },
-    },
-    preHandler: [fastify.authenticate],
-  }, controller.getInvoice.bind(controller))
-
-  // ─── Admin routes ───────────────────────────────────────
-
-  // GET /admin/all — List all orders [ADMIN]
-  fastify.get('/admin/all', {
-    schema: adminListOrdersSchema,
-    preHandler: [fastify.authenticate, fastify.authorize(['ADMIN'])],
-  }, controller.adminList.bind(controller))
-
-  // PUT /admin/:id/status — Update order status [ADMIN]
-  fastify.put('/admin/:id/status', {
-    schema: adminUpdateStatusSchema,
-    preHandler: [fastify.authenticate, fastify.authorize(['ADMIN'])],
-  }, controller.adminUpdateStatus.bind(controller))
-
-  // PUT /admin/:id/rider — Assign rider [ADMIN]
-  fastify.put('/admin/:id/rider', {
-    schema: adminAssignRiderSchema,
-    preHandler: [fastify.authenticate, fastify.authorize(['ADMIN'])],
-  }, controller.adminAssignRider.bind(controller))
+    handler: controller.listOrders,
+  })
 }
+
+export default ordersRoutes

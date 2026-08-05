@@ -1,119 +1,58 @@
-import { success, error } from '../../utils/apiResponse.js'
-
 /**
- * Orders controller — thin HTTP layer
+ * Orders Controller — HTTP Handler Layer for Orders & Fulfilment
+ * Source of truth: Blueprint §06.7, Phase 8
+ *
+ * @module modules/orders/orders.controller
  */
+
 export class OrdersController {
+  /**
+   * @param {import('./orders.service.js').OrdersService} service
+   */
   constructor(service) {
     this.service = service
   }
 
-  // ─── Customer endpoints ─────────────────────────────────
-
-  async placeOrder(request, reply) {
-    const result = await this.service.placeOrder(request.user.id, request.body)
-    if (!result.success) {
-      const code = result.code || 'ORDER_FAILED'
-      const payload = error(result.message, code)
-      if (Array.isArray(result.failures) && result.failures.length > 0) {
-        payload.failures = result.failures
-      }
-      return reply.code(400).send(payload)
-    }
-    // Multi-vendor: return the full per-shop order list, keep `order` for
-    // backwards compatibility with single-shop clients.
-    const data = {
-      orders: result.orders || [result.order],
-      order: result.order,
-    }
-    return reply.code(201).send(success(data, 'Order placed successfully'))
+  createOrderFromQuote = async (req, reply) => {
+    const customerId = req.userId || req.user.id
+    const order = await this.service.createOrderFromQuote(customerId, req.body)
+    return reply.status(201).send({ success: true, data: order })
   }
 
-  async list(request, reply) {
-    const { orders, pagination } = await this.service.listByUser(
-      request.user.id,
-      request.query
-    )
-    return reply.send(success(orders, 'Orders fetched', { pagination }))
+  transitionOrderStatus = async (req, reply) => {
+    const { orderId } = req.params
+    const actorId = req.userId || req.user.id
+    const updated = await this.service.transitionOrderStatus(orderId, actorId, req.body.status, req.body.notes)
+    return reply.status(200).send({ success: true, data: updated })
   }
 
-  async getActive(request, reply) {
-    const order = await this.service.getActive(request.user.id)
-    if (!order) {
-      return reply.code(404).send(error('No active order', 'NOT_FOUND'))
+  createFulfilmentTask = async (req, reply) => {
+    const { orderId } = req.params
+    const actorId = req.userId || req.user.id
+    const task = await this.service.createFulfilmentTask(orderId, actorId, req.body)
+    return reply.status(201).send({ success: true, data: task })
+  }
+
+  updateFulfilmentTaskStatus = async (req, reply) => {
+    const { taskId } = req.params
+    const actorId = req.userId || req.user.id
+    const task = await this.service.updateFulfilmentTaskStatus(taskId, actorId, req.body.status, req.body.notes)
+    return reply.status(200).send({ success: true, data: task })
+  }
+
+  getOrderById = async (req, reply) => {
+    const { orderId } = req.params
+    const order = await this.service.getOrderById(orderId)
+    return reply.status(200).send({ success: true, data: order })
+  }
+
+  listOrders = async (req, reply) => {
+    const params = {
+      customerId: req.user?.platform_role === 'CUSTOMER' ? (req.userId || req.user.id) : (req.query.customer_id || null),
+      warehouseId: req.warehouseId || req.query.warehouse_id || null,
+      status: req.query.status || null,
     }
-    return reply.send(success(order, 'Active order fetched'))
-  }
-
-  async getById(request, reply) {
-    const order = await this.service.getById(request.user.id, request.params.id)
-    if (!order) {
-      return reply.code(404).send(error('Order not found', 'NOT_FOUND'))
-    }
-    return reply.send(success(order, 'Order fetched'))
-  }
-
-  async cancel(request, reply) {
-    const result = await this.service.cancel(
-      request.user.id,
-      request.params.id,
-      request.body?.reason
-    )
-    if (!result.success) {
-      return reply.code(400).send(error(result.message, 'CANCEL_FAILED'))
-    }
-    return reply.send(success(result.order, 'Order cancelled'))
-  }
-
-  async reorder(request, reply) {
-    const result = await this.service.reorder(request.user.id, request.params.id)
-    if (!result.success) {
-      return reply.code(400).send(error(result.message, 'REORDER_FAILED'))
-    }
-    return reply.send(success(result.cart, 'Items added to cart', {
-      warnings: result.warnings,
-    }))
-  }
-
-  // ─── Admin endpoints ────────────────────────────────────
-
-  async adminList(request, reply) {
-    const { orders, pagination } = await this.service.adminListAll(request.query)
-    return reply.send(success(orders, 'Orders fetched', { pagination }))
-  }
-
-  async adminUpdateStatus(request, reply) {
-    const result = await this.service.adminUpdateStatus(
-      request.params.id,
-      request.body.status
-    )
-    if (!result.success) {
-      return reply.code(400).send(error(result.message, 'UPDATE_FAILED'))
-    }
-    return reply.send(success(result.order, 'Order status updated'))
-  }
-
-  async adminAssignRider(request, reply) {
-    const result = await this.service.adminAssignRider(
-      request.params.id,
-      request.body.riderId
-    )
-    if (!result.success) {
-      return reply.code(400).send(error(result.message, 'ASSIGN_FAILED'))
-    }
-    return reply.send(success(result.order, 'Rider assigned'))
-  }
-
-  // ─── Invoice ────────────────────────────────────────────
-
-  async getInvoice(request, reply) {
-    const result = await this.service.getInvoice(request.user.id, request.params.id)
-    if (!result.success) {
-      return reply.code(result.statusCode || 400).send(error(result.message, 'INVOICE_FAILED'))
-    }
-    reply
-      .header('Content-Type', 'application/pdf')
-      .header('Content-Disposition', `attachment; filename=invoice-${result.orderNumber}.pdf`)
-    return reply.send(result.buffer)
+    const orders = await this.service.listOrders(params)
+    return reply.status(200).send({ success: true, data: orders })
   }
 }

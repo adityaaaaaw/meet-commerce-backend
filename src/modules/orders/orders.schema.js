@@ -1,385 +1,55 @@
 /**
- * Orders JSON schemas for request/response validation
+ * Orders & Fulfilment Schemas
+ * Source of truth: Blueprint §06.7, Phase 8
+ *
+ * @module modules/orders/orders.schema
  */
 
-const orderItemSchema = {
+export const CreateOrderFromQuoteSchema = {
   type: 'object',
+  required: ['quote_number'],
   properties: {
-    productId: { type: 'string', format: 'uuid' },
-    name: { type: 'string' },
-    price: { type: 'number' },
-    quantity: { type: 'integer' },
-    unit: { type: 'string' },
-    total: { type: 'number' },
-    thumbnailUrl: { type: ['string', 'null'] },
+    quote_number: { type: 'string', minLength: 1 },
+    warehouse_id: { type: 'string' },
   },
+  additionalProperties: false,
 }
 
-const timelineItemSchema = {
+export const UpdateOrderStatusSchema = {
   type: 'object',
+  required: ['status'],
   properties: {
-    type: { type: 'string' },
-    status: { type: 'string' },
-    message: { type: ['string', 'null'] },
-    timestamp: { type: ['string', 'null'] },
+    status: {
+      type: 'string',
+      enum: [
+        'CART_CREATED', 'ORDER_PLACED', 'PAYMENT_PENDING', 'PAYMENT_CONFIRMED',
+        'CONFIRMED', 'ALLOCATING_STOCK', 'STOCK_RESERVED', 'PICKING', 'PACKING',
+        'READY_FOR_DISPATCH', 'DISPATCHED', 'OUT_FOR_DELIVERY', 'DELIVERED',
+        'COMPLETED', 'CANCELLED', 'PAYMENT_FAILED', 'RETURN_REQUESTED', 'RETURNED'
+      ],
+    },
+    notes: { type: 'string' },
   },
+  additionalProperties: false,
 }
 
-const trackingSchema = {
+export const CreateFulfilmentTaskSchema = {
   type: 'object',
+  required: ['task_type'],
   properties: {
-    rider: {
-      type: ['object', 'null'],
-      properties: {
-        id: { type: 'string' },
-        name: { type: 'string' },
-        phone: { type: 'string' },
-      },
-    },
-    riderLocation: {
-      type: ['object', 'null'],
-      properties: {
-        lat: { type: ['number', 'null'] },
-        lng: { type: ['number', 'null'] },
-        timestamp: { type: ['string', 'null'] },
-      },
-    },
-    destination: {
-      type: 'object',
-      properties: {
-        lat: { type: ['number', 'null'] },
-        lng: { type: ['number', 'null'] },
-        addressLine1: { type: 'string' },
-        addressLine2: { type: 'string' },
-        landmark: { type: 'string' },
-        city: { type: 'string' },
-        state: { type: 'string' },
-        pincode: { type: 'string' },
-      },
-    },
+    task_type: { type: 'string', enum: ['PICKING', 'PACKING'] },
+    assigned_to: { type: 'string' },
+    notes: { type: 'string' },
   },
+  additionalProperties: false,
 }
 
-// Snapshot of the address selected at checkout (orders.delivery_address).
-// Mirrors addresses.schema.js's addressProperties — Fastify's AJV
-// serializer (removeAdditional: 'all') strips any nested key not
-// declared here, so this must list every field the snapshot can carry.
-const deliveryAddressSchema = {
+export const UpdateFulfilmentTaskSchema = {
   type: 'object',
+  required: ['status'],
   properties: {
-    id: { type: 'string' },
-    label: { type: 'string' },
-    name: { type: ['string', 'null'] },
-    phone: { type: ['string', 'null'] },
-    addressLine1: { type: 'string' },
-    addressLine2: { type: ['string', 'null'] },
-    landmark: { type: ['string', 'null'] },
-    city: { type: 'string' },
-    state: { type: ['string', 'null'] },
-    pincode: { type: 'string' },
-    lat: { type: ['number', 'null'] },
-    lng: { type: ['number', 'null'] },
-    isDefault: { type: 'boolean' },
-    createdAt: { type: 'string' },
-    updatedAt: { type: 'string' },
+    status: { type: 'string', enum: ['PENDING', 'IN_PROGRESS', 'COMPLETED', 'FAILED'] },
+    notes: { type: 'string' },
   },
-}
-
-const orderResponseSchema = {
-  type: 'object',
-  properties: {
-    id: { type: 'string', format: 'uuid' },
-    orderNumber: { type: 'string' },
-    shopId: { type: ['string', 'null'] },
-    status: { type: 'string' },
-    items: { type: 'array', items: orderItemSchema },
-    subtotal: { type: 'number' },
-    discountAmount: { type: 'number' },
-    deliveryFee: { type: 'number' },
-    platformFee: { type: 'number' },
-    taxAmount: { type: 'number' },
-    totalAmount: { type: 'number' },
-    paymentMethod: { type: 'string' },
-    paymentStatus: { type: 'string' },
-    couponCode: { type: ['string', 'null'] },
-    deliveryAddress: deliveryAddressSchema,
-    deliveryNotes: { type: ['string', 'null'] },
-    handlingFee: { type: 'number' },
-    lateNightFee: { type: 'number' },
-    tipAmount: { type: 'number' },
-    deliveryInstructions: { type: ['string', 'null'] },
-    savingsTotal: { type: 'number' },
-    estimatedDelivery: { type: ['string', 'null'] },
-    deliveredAt: { type: ['string', 'null'] },
-    createdAt: { type: 'string' },
-    riderId: { type: ['string', 'null'] },
-    riderName: { type: ['string', 'null'] },
-    riderPhone: { type: ['string', 'null'] },
-    deliveryOtp: { type: ['string', 'null'] },
-    // Delivery slot fields
-    deliveryMode: { type: 'string', enum: ['ASAP', 'SCHEDULED'] },
-    scheduledDeliveryAt: { type: ['string', 'null'] },
-    scheduledSlotStart: { type: ['string', 'null'] },
-    scheduledSlotEnd: { type: ['string', 'null'] },
-    scheduledSlotLabel: { type: ['string', 'null'] },
-    quickDeliverySelected: { type: 'boolean' },
-    quickDeliverySurchargeAmount: { type: 'number' },
-    timeline: { type: 'array', items: timelineItemSchema },
-    tracking: trackingSchema,
-  },
-}
-
-export const placeOrderSchema = {
-  tags: ['Orders'],
-  summary: 'Place a new order from cart',
-  body: {
-    type: 'object',
-    required: ['addressId', 'paymentMethod'],
-    properties: {
-      addressId: { type: 'string', format: 'uuid' },
-      paymentMethod: { type: 'string', enum: ['COD', 'ONLINE', 'WALLET'] },
-      couponCode: {
-        oneOf: [
-          { type: 'string', minLength: 1, maxLength: 50 },
-          { type: 'null' },
-        ],
-      },
-      deliveryNotes: { type: 'string', maxLength: 500 },
-      tipAmount: { type: 'number', minimum: 0, maximum: 500 },
-      deliveryInstructions: { type: ['string', 'null'], maxLength: 200 },
-      handlingFee: { type: 'number', minimum: 0, default: 0 },
-      lateNightFee: { type: 'number', minimum: 0, default: 0 },
-      savingsTotal: { type: 'number', minimum: 0, default: 0 },
-      // Delivery slot fields
-      deliveryMode: { type: 'string', enum: ['ASAP', 'SCHEDULED'], default: 'ASAP' },
-      scheduledDeliveryAt: { type: ['string', 'null'] },
-      scheduledSlotStart: { type: ['string', 'null'] },
-      scheduledSlotEnd: { type: ['string', 'null'] },
-      scheduledSlotLabel: { type: ['string', 'null'], maxLength: 100 },
-      // Quick Delivery — explicit opt-in only; only meaningful for ASAP orders.
-      quickDeliverySelected: { type: 'boolean', default: false },
-    },
-  },
-  response: {
-    201: {
-      type: 'object',
-      properties: {
-        success: { type: 'boolean' },
-        message: { type: 'string' },
-        data: {
-          type: 'object',
-          properties: {
-            orders: { type: 'array', items: orderResponseSchema },
-            order:  orderResponseSchema,
-          },
-        },
-      },
-    },
-  },
-}
-
-export const listOrdersSchema = {
-  tags: ['Orders'],
-  summary: 'List user orders (paginated)',
-  querystring: {
-    type: 'object',
-    properties: {
-      page: { type: 'integer', minimum: 1, default: 1 },
-      limit: { type: 'integer', minimum: 1, maximum: 50, default: 10 },
-      status: { type: 'string' },
-    },
-  },
-  response: {
-    200: {
-      type: 'object',
-      properties: {
-        success: { type: 'boolean' },
-        message: { type: 'string' },
-        data: { type: 'array', items: orderResponseSchema },
-        pagination: {
-          type: 'object',
-          properties: {
-            page: { type: 'integer' },
-            limit: { type: 'integer' },
-            total: { type: 'integer' },
-            totalPages: { type: 'integer' },
-          },
-        },
-      },
-    },
-  },
-}
-
-export const getOrderSchema = {
-  tags: ['Orders'],
-  summary: 'Get order details by ID',
-  params: {
-    type: 'object',
-    required: ['id'],
-    properties: {
-      id: { type: 'string', format: 'uuid' },
-    },
-  },
-  response: {
-    200: {
-      type: 'object',
-      properties: {
-        success: { type: 'boolean' },
-        message: { type: 'string' },
-        data: orderResponseSchema,
-      },
-    },
-  },
-}
-
-export const activeOrderSchema = {
-  tags: ['Orders'],
-  summary: 'Get active (in-progress) order',
-  response: {
-    200: {
-      type: 'object',
-      properties: {
-        success: { type: 'boolean' },
-        message: { type: 'string' },
-        data: orderResponseSchema,
-      },
-    },
-  },
-}
-
-export const cancelOrderSchema = {
-  tags: ['Orders'],
-  summary: 'Cancel an order',
-  params: {
-    type: 'object',
-    required: ['id'],
-    properties: {
-      id: { type: 'string', format: 'uuid' },
-    },
-  },
-  body: {
-    type: 'object',
-    properties: {
-      reason: { type: 'string', maxLength: 500 },
-    },
-  },
-  response: {
-    200: {
-      type: 'object',
-      properties: {
-        success: { type: 'boolean' },
-        message: { type: 'string' },
-      },
-    },
-  },
-}
-
-export const reorderSchema = {
-  tags: ['Orders'],
-  summary: 'Re-order items from a past order',
-  params: {
-    type: 'object',
-    required: ['id'],
-    properties: {
-      id: { type: 'string', format: 'uuid' },
-    },
-  },
-  response: {
-    200: {
-      type: 'object',
-      properties: {
-        success: { type: 'boolean' },
-        message: { type: 'string' },
-        data: { type: 'object' },
-      },
-    },
-  },
-}
-
-// ─── Admin Schemas ─────────────────────────────────────
-
-export const adminListOrdersSchema = {
-  tags: ['Orders', 'Admin'],
-  summary: 'List all orders (admin, paginated)',
-  querystring: {
-    type: 'object',
-    properties: {
-      page: { type: 'integer', minimum: 1, default: 1 },
-      limit: { type: 'integer', minimum: 1, maximum: 50, default: 20 },
-      status: { type: 'string' },
-      userId: { type: 'string', format: 'uuid' },
-    },
-  },
-  response: {
-    200: {
-      type: 'object',
-      properties: {
-        success: { type: 'boolean' },
-        message: { type: 'string' },
-        data: { type: 'array', items: orderResponseSchema },
-        pagination: { type: 'object' },
-      },
-    },
-  },
-}
-
-export const adminUpdateStatusSchema = {
-  tags: ['Orders', 'Admin'],
-  summary: 'Update order status',
-  params: {
-    type: 'object',
-    required: ['id'],
-    properties: {
-      id: { type: 'string', format: 'uuid' },
-    },
-  },
-  body: {
-    type: 'object',
-    required: ['status'],
-    properties: {
-      status: {
-        type: 'string',
-        enum: ['CONFIRMED', 'PREPARING', 'PACKED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED'],
-      },
-    },
-  },
-  response: {
-    200: {
-      type: 'object',
-      properties: {
-        success: { type: 'boolean' },
-        message: { type: 'string' },
-        data: orderResponseSchema,
-      },
-    },
-  },
-}
-
-export const adminAssignRiderSchema = {
-  tags: ['Orders', 'Admin'],
-  summary: 'Assign a rider to an order',
-  params: {
-    type: 'object',
-    required: ['id'],
-    properties: {
-      id: { type: 'string', format: 'uuid' },
-    },
-  },
-  body: {
-    type: 'object',
-    required: ['riderId'],
-    properties: {
-      riderId: { type: 'string', format: 'uuid' },
-    },
-  },
-  response: {
-    200: {
-      type: 'object',
-      properties: {
-        success: { type: 'boolean' },
-        message: { type: 'string' },
-        data: orderResponseSchema,
-      },
-    },
-  },
+  additionalProperties: false,
 }
