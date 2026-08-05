@@ -25,7 +25,7 @@ export class CartQuoteService {
     const { product_id, quantity } = payload
     const product = await this.repository.findProductById(product_id)
 
-    if (!product || product.status !== 'ACTIVE') {
+    if (!product || product.is_active === false || product.status === 'INACTIVE') {
       const err = new Error('Product is unavailable or out of stock')
       err.statusCode = 400
       err.code = 'UNAVAILABLE_PRODUCT_REJECTED'

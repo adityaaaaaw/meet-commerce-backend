@@ -112,11 +112,7 @@ export class ProductsService {
       // This preserves Requirement 1.5 (allocation-based scoping) for users
       // who HAVE an allocation, while unblocking onboarding for users who don't.
       if (Array.isArray(ids) && ids.length === 0) {
-        logger.debug(
-          { customerId: customerContext.userId, action: 'products.allocation_fallback' },
-          'Customer has no allocated shops — falling back to anonymous (unscoped) visibility'
-        )
-        return null
+        return []
       }
       return Array.isArray(ids) ? ids : null
     } catch (err) {
@@ -126,9 +122,9 @@ export class ProductsService {
           err: err.message,
           action: 'products.resolve_allocations',
         },
-        'Failed to resolve customer allocations; falling back to anonymous visibility'
+        'Failed to resolve customer allocations; falling back to zero allocations'
       )
-      return null
+      return []
     }
   }
 

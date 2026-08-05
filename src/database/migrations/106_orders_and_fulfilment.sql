@@ -1,45 +1,59 @@
 -- Migration 106: Customer Orders, 17-State Machine & Fulfilment Workflow
 -- Source of truth: Blueprint §06.7, Phase 8
 
--- 1. Orders Table
-CREATE TABLE IF NOT EXISTS orders (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  order_number VARCHAR(100) UNIQUE NOT NULL,
-  quote_id UUID REFERENCES checkout_quotes(id) ON DELETE SET NULL,
-  customer_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  warehouse_id UUID REFERENCES warehouses(id) ON DELETE SET NULL,
-  status TEXT NOT NULL CHECK (status IN (
-    'CART_CREATED', 'ORDER_PLACED', 'PAYMENT_PENDING', 'PAYMENT_CONFIRMED',
-    'CONFIRMED', 'ALLOCATING_STOCK', 'STOCK_RESERVED', 'PICKING', 'PACKING',
-    'READY_FOR_DISPATCH', 'DISPATCHED', 'OUT_FOR_DELIVERY', 'DELIVERED',
-    'COMPLETED', 'CANCELLED', 'PAYMENT_FAILED', 'RETURN_REQUESTED', 'RETURNED'
-  )) DEFAULT 'ORDER_PLACED',
-  subtotal NUMERIC(10,2) NOT NULL,
-  discount_amount NUMERIC(10,2) NOT NULL DEFAULT 0.00,
-  loyalty_redeemed_amount NUMERIC(10,2) NOT NULL DEFAULT 0.00,
-  tax_amount NUMERIC(10,2) NOT NULL DEFAULT 0.00,
-  total_payable NUMERIC(10,2) NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
+-- Alter orders table to match Phase 8 requirements
+DROP INDEX IF EXISTS idx_orders_analytics;
+
+DO $$
+BEGIN
+  -- Rename user_id to customer_id if exists
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='orders' AND column_name='user_id') THEN
+    ALTER TABLE orders RENAME COLUMN user_id TO customer_id;
+  END IF;
+
+  -- Rename total_amount to total_payable if exists
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='orders' AND column_name='total_amount') THEN
+    ALTER TABLE orders RENAME COLUMN total_amount TO total_payable;
+  END IF;
+
+  -- Change status type to TEXT if it is not already
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='orders' AND column_name='status' AND data_type='USER-DEFINED') THEN
+    ALTER TABLE orders ALTER COLUMN status DROP DEFAULT;
+    ALTER TABLE orders ALTER COLUMN status TYPE TEXT USING status::text;
+    ALTER TABLE orders ALTER COLUMN status SET DEFAULT 'ORDER_PLACED';
+  END IF;
+END $$;
+
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS quote_id UUID REFERENCES checkout_quotes(id) ON DELETE SET NULL;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS warehouse_id UUID REFERENCES warehouses(id) ON DELETE SET NULL;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS loyalty_redeemed_amount NUMERIC(10,2) NOT NULL DEFAULT 0.00;
 
 CREATE INDEX IF NOT EXISTS idx_orders_customer ON orders(customer_id);
 CREATE INDEX IF NOT EXISTS idx_orders_warehouse ON orders(warehouse_id);
 CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
+CREATE INDEX IF NOT EXISTS idx_orders_analytics ON orders(created_at, status) WHERE status NOT IN ('CANCELLED', 'REFUNDED');
 
--- 2. Order Items Table
-CREATE TABLE IF NOT EXISTS order_items (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  order_id UUID NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
-  product_id UUID NOT NULL REFERENCES products(id) ON DELETE RESTRICT,
-  product_name VARCHAR(255) NOT NULL,
-  quantity NUMERIC(10,2) NOT NULL CHECK (quantity > 0),
-  unit_price NUMERIC(10,2) NOT NULL CHECK (unit_price >= 0),
-  subtotal NUMERIC(10,2) NOT NULL,
-  product_snapshot JSONB NOT NULL DEFAULT '{}'::jsonb,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
+-- Alter order_items table to match Phase 8 requirements
+DO $$
+BEGIN
+  -- Rename name to product_name if exists
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='order_items' AND column_name='name') THEN
+    ALTER TABLE order_items RENAME COLUMN name TO product_name;
+  END IF;
+
+  -- Rename price to unit_price if exists
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='order_items' AND column_name='price') THEN
+    ALTER TABLE order_items RENAME COLUMN price TO unit_price;
+  END IF;
+
+  -- Rename total to subtotal if exists
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='order_items' AND column_name='total') THEN
+    ALTER TABLE order_items RENAME COLUMN total TO subtotal;
+  END IF;
+END $$;
+
+ALTER TABLE order_items ALTER COLUMN quantity TYPE NUMERIC(10,2);
+ALTER TABLE order_items ADD COLUMN IF NOT EXISTS product_snapshot JSONB NOT NULL DEFAULT '{}'::jsonb;
 
 CREATE INDEX IF NOT EXISTS idx_order_items_order ON order_items(order_id);
 

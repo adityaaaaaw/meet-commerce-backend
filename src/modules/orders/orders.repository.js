@@ -47,9 +47,43 @@ export class OrdersRepository {
     return this.findOrderById(rows[0].id)
   }
 
-  async updateOrderStatus(orderId, status) {
-    const { rows } = await query(`UPDATE orders SET status = $2 WHERE id = $1 RETURNING *`, [orderId, status])
+  async findById(orderId) {
+    return this.findOrderById(orderId)
+  }
+
+  async updateStatus(orderId, status, options = {}) {
+    const setClauses = []
+    const params = []
+
+    if (status !== undefined) {
+      setClauses.push(`status = $${params.length + 1}`)
+      params.push(status)
+    }
+
+    if (options.paymentStatus !== undefined) {
+      setClauses.push(`payment_status = $${params.length + 1}`)
+      params.push(options.paymentStatus)
+    }
+
+    if (options.paymentExpiresAt !== undefined) {
+      setClauses.push(`payment_expires_at = $${params.length + 1}`)
+      params.push(options.paymentExpiresAt)
+    }
+
+    if (setClauses.length === 0) {
+      return this.findOrderById(orderId)
+    }
+
+    params.push(orderId)
+    const { rows } = await query(
+      `UPDATE orders SET ${setClauses.join(', ')} WHERE id = $${params.length} RETURNING *`,
+      params
+    )
     return rows[0]
+  }
+
+  async updateOrderStatus(orderId, status) {
+    return this.updateStatus(orderId, status)
   }
 
   async logStatusTransition(orderId, fromStatus, toStatus, actorId = null, notes = null) {

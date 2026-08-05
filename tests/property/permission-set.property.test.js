@@ -88,8 +88,8 @@ describe('Property 2.8: Permission Set Vocabulary — HQ users', () => {
           expect(PERMISSIONS.has(perm)).toBe(true)
         }
 
-        // Also verify it matches the frozen role map
-        const expected = HQ_ROLE_PERMISSIONS[role]
+        // Also verify it matches the frozen role map (or empty set if unmapped)
+        const expected = HQ_ROLE_PERMISSIONS[role] || new Set()
         expect(effective).toEqual(expected)
       }),
       { numRuns: NUM_RUNS, seed: SEED }

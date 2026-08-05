@@ -213,11 +213,11 @@ export class CartService {
         }
         return { success: true, productId, shopId: resolvedShopIdRetry, sp: spRetry }
       }
-      // No allocation and no default address — give an actionable message
+      // No allocation and no default address — return SHOP_NOT_AVAILABLE
       return {
         success: false,
-        message: 'Please set your delivery address to add items to cart.',
-        code: 'SHOP_ALLOCATION_REQUIRED',
+        message: 'Product is not available in your delivery area',
+        code: 'SHOP_NOT_AVAILABLE',
       }
     }
     if (candidates.length > 1) {
@@ -590,14 +590,6 @@ export class CartService {
 
     if (matches.length === 0) {
       return { success: false, message: 'Item not in cart', code: 'CART_ITEM_NOT_FOUND' }
-    }
-    if (matches.length > 1) {
-      return {
-        success: false,
-        message:
-          'Multiple cart entries match. Please specify shopId or shopProductId.',
-        code: 'CART_ITEM_AMBIGUOUS',
-      }
     }
 
     const filtered = cartItems.filter((i) => {

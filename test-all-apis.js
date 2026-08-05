@@ -1,6 +1,6 @@
 import http from 'http';
 
-const BASE = 'http://localhost:3000/api/v1';
+const BASE = 'http://localhost:4500/api/v1';
 let TOKEN = '';
 const results = [];
 

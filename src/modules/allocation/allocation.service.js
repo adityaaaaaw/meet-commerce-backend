@@ -190,13 +190,17 @@ export class AllocationService {
         primary = b
         continue
       }
-      if (bDist === null) continue
+      if (aDist !== null && bDist === null) {
+        continue
+      }
 
-      if (bDist < aDist) {
+      if (aDist !== null && bDist !== null && bDist < aDist) {
         primary = b
         continue
       }
-      if (bDist === aDist) {
+
+      // Tie break: both numeric equal OR both null
+      if (aDist === bDist || (aDist === null && bDist === null)) {
         const aCreated = new Date(a.created_at).getTime()
         const bCreated = new Date(b.created_at).getTime()
         if (

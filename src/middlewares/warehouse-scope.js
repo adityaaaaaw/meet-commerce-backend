@@ -77,7 +77,7 @@ export async function isWarehouseActive(warehouseId) {
 
   const { rows } = await query(
     `SELECT id FROM warehouses
-      WHERE id = $1 AND is_active = true AND deleted_at IS NULL
+      WHERE id = $1 AND is_active = true
       LIMIT 1`,
     [warehouseId]
   ).catch(async () => {

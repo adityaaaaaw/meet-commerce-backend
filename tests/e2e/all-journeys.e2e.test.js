@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import { VendorsService } from '../../src/modules/vendors/vendors.service.js'
-import { VendorKycService } from '../../src/modules/vendor-kyc/vendor-kyc.service.js'
-import { VendorStaffService } from '../../src/modules/vendor-staff/vendor-staff.service.js'
-import { ProductProposalsService } from '../../src/modules/catalogue/product-proposals.service.js'
+import { VendorKycService } from '../../src/modules/vendors/vendor-kyc.service.js'
+import { VendorStaffService } from '../../src/modules/vendors/vendor-staff.service.js'
+import { CatalogueService } from '../../src/modules/catalogue/catalogue.service.js'
 import { ProcurementService } from '../../src/modules/procurement/procurement.service.js'
 import { WarehouseReceiptsService } from '../../src/modules/warehouse-receipts/warehouse-receipts.service.js'
 import { InventoryService } from '../../src/modules/inventory/inventory.service.js'
@@ -13,57 +13,69 @@ import { SupportService } from '../../src/modules/support/support.service.js'
 
 describe('Phase 11 — Complete 14 E2E Journeys Regression Suite', () => {
   it('Journey 1: Vendor Onboarding', async () => {
-    const repoMock = { createVendor: vi.fn().mockResolvedValue({ id: 'v-1', status: 'PENDING_ONBOARDING' }) }
+    const repoMock = {
+      findDuplicate: vi.fn().mockResolvedValue(null),
+      create: vi.fn().mockResolvedValue({ id: 'v-1', status: 'PENDING_ONBOARDING' }),
+    }
     const svc = new VendorsService(repoMock)
-    const vendor = await svc.createVendor('user-1', { business_name: 'Prime Meat Co' })
+    const vendor = await svc.createVendor('user-1', { business_name: 'Prime Meat Co', email: 'v1@test.com', phone: '1234567890' })
     expect(vendor.status).toBe('PENDING_ONBOARDING')
   })
 
   it('Journey 2: Vendor KYC Approval', async () => {
-    const repoMock = {
+    const kycRepoMock = {
       findKycByVendorId: vi.fn().mockResolvedValue({ id: 'kyc-1', vendor_id: 'v-1', status: 'KYC_SUBMITTED' }),
       updateKycStatus: vi.fn().mockResolvedValue({ id: 'kyc-1', status: 'VERIFIED' }),
+      updateVendorStatus: vi.fn().mockResolvedValue({ id: 'v-1', status: 'VERIFIED' }),
       logKycReview: vi.fn().mockResolvedValue({}),
+      logReview: vi.fn().mockResolvedValue({}),
     }
-    const vendorRepoMock = { updateVendorStatus: vi.fn().mockResolvedValue({ id: 'v-1', status: 'ACTIVE' }) }
-    const svc = new VendorKycService(repoMock, vendorRepoMock)
-    const res = await svc.reviewKyc('kyc-1', 'admin-1', 'VERIFIED')
-    expect(res.kyc.status).toBe('VERIFIED')
+    const vendorRepoMock = {
+      findById: vi.fn().mockResolvedValue({ id: 'v-1', status: 'UNDER_REVIEW' }),
+      updateVendorStatus: vi.fn().mockResolvedValue({ id: 'v-1', status: 'VERIFIED' }),
+    }
+    const svc = new VendorKycService(vendorRepoMock, kycRepoMock)
+    const res = await svc.reviewKyc('v-1', 'admin-1', { action: 'APPROVE', notes: 'Approved' })
+    expect(res.vendor.status).toBe('VERIFIED')
   })
 
   it('Journey 3: Vendor Staff Invitation', async () => {
-    const repoMock = { createInvitation: vi.fn().mockResolvedValue({ id: 'inv-1', email: 'staff@primemeat.com', token: 'token-123' }) }
-    const svc = new VendorStaffService(repoMock)
+    const repoMock = {
+      createInvitation: vi.fn().mockResolvedValue({ id: 'inv-1', email: 'staff@primemeat.com', token: 'token-123' }),
+      logAudit: vi.fn().mockResolvedValue({}),
+    }
+    const vendorRepoMock = { findById: vi.fn().mockResolvedValue({ id: 'v-1' }) }
+    const svc = new VendorStaffService(repoMock, vendorRepoMock)
     const inv = await svc.inviteStaff('v-1', 'owner-1', { email: 'staff@primemeat.com', role: 'VENDOR_STAFF' })
     expect(inv.email).toBe('staff@primemeat.com')
   })
 
   it('Journey 4: Product Proposal Creation', async () => {
     const repoMock = { createProposal: vi.fn().mockResolvedValue({ id: 'prop-1', title: 'Ribeye Steak', status: 'DRAFT' }) }
-    const svc = new ProductProposalsService(repoMock)
+    const svc = new CatalogueService(repoMock)
     const prop = await svc.createProposal('v-1', { title: 'Ribeye Steak', category_id: 'cat-1' })
     expect(prop.status).toBe('DRAFT')
   })
 
   it('Journey 5: Product Approval', async () => {
     const repoMock = {
-      findProposalById: vi.fn().mockResolvedValue({ id: 'prop-1', vendor_id: 'v-1', status: 'SUBMITTED' }),
+      findProposalById: vi.fn().mockResolvedValue({ id: 'prop-1', vendor_id: 'v-1', status: 'UNDER_REVIEW' }),
       updateProposalStatus: vi.fn().mockResolvedValue({ id: 'prop-1', status: 'APPROVED' }),
-      logReview: vi.fn().mockResolvedValue({}),
+      logProposalReview: vi.fn().mockResolvedValue({}),
     }
-    const svc = new ProductProposalsService(repoMock)
-    const prop = await svc.reviewProposal('prop-1', 'admin-1', 'APPROVED')
+    const svc = new CatalogueService(repoMock)
+    const prop = await svc.reviewProposal('prop-1', 'admin-1', { action: 'APPROVE', comments: 'OK' })
     expect(prop.status).toBe('APPROVED')
   })
 
   it('Journey 6: Procurement Creation', async () => {
     const repoMock = {
-      createOrder: vi.fn().mockResolvedValue({ id: 'po-1', order_number: 'PO-100', status: 'DRAFT' }),
-      addOrderItem: vi.fn().mockResolvedValue({ id: 'poi-1', quantity_ordered: 100 }),
+      createProcurementOrder: vi.fn().mockResolvedValue({ id: 'po-1', order_number: 'PO-100', status: 'DRAFT' }),
+      addProcurementItem: vi.fn().mockResolvedValue({ id: 'poi-1', quantity_ordered: 100 }),
       logAudit: vi.fn().mockResolvedValue({}),
     }
     const svc = new ProcurementService(repoMock)
-    const order = await svc.createOrder('v-1', 'user-1', { items: [{ product_id: 'p-1', quantity_ordered: 100, unit_cost: 150 }] })
+    const order = await svc.createProcurement('v-1', 'user-1', { items: [{ product_id: 'p-1', quantity_ordered: 100, unit_cost: 150 }] })
     expect(order.order_number).toBe('PO-100')
   })
 

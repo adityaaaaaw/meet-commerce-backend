@@ -177,6 +177,7 @@ function expectedVisibleSet(allocatedShopIds, model) {
 function makeFakeQuery(model) {
   return vi.fn(async (sql, params = []) => {
     const text = typeof sql === 'string' ? sql : sql?.text || ''
+    // console.log('QUERY CALL:', text, 'PARAMS:', params)
 
     const hasVisibilityExists =
       /EXISTS\s*\(/i.test(text) && /shop_products\s+sp/i.test(text)
@@ -203,13 +204,18 @@ function makeFakeQuery(model) {
       visibleProducts = model.products.slice()
     }
 
-    if (/COUNT\s*\(/i.test(text)) {
+    if (/\bSELECT\s+COUNT\s*\([^)]*\)(?:::\w+)?\s+AS\s+total\b/i.test(text)) {
       return { rows: [{ total: visibleProducts.length }] }
     }
 
-    // Data query: limit/offset are the last two bound params
-    const limit = Number(params[params.length - 2]) || visibleProducts.length
-    const offset = Number(params[params.length - 1]) || 0
+    // Data query: parse LIMIT $A and OFFSET $B parameter indices if present
+    const limitMatch = /\bLIMIT\s+\$(\d+)/i.exec(text)
+    const offsetMatch = /\bOFFSET\s+\$(\d+)/i.exec(text)
+    const limitVal = limitMatch ? Number(params[Number(limitMatch[1]) - 1]) : visibleProducts.length
+    const offsetVal = offsetMatch ? Number(params[Number(offsetMatch[1]) - 1]) : 0
+    const limit = isNaN(limitVal) ? visibleProducts.length : limitVal
+    const offset = isNaN(offsetVal) ? 0 : offsetVal
+
     const rows = visibleProducts.slice(offset, offset + limit).map((p) => ({
       id: p.id,
       name: p.name,

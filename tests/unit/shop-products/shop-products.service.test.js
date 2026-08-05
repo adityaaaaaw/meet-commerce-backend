@@ -946,10 +946,10 @@ describe('ShopProductsRepository — SQL safety', () => {
 
     const [sql, params] = query.mock.calls[0]
     expect(sql).toMatch(/INSERT INTO shop_products/i)
-    for (let i = 1; i <= 10; i++) {
+    for (let i = 1; i <= 11; i++) {
       expect(sql).toContain(`$${i}`)
     }
-    expect(params).toHaveLength(10)
+    expect(params).toHaveLength(11)
     // Column list must be explicit
     expect(sql).toMatch(/shop_id,\s*product_id/)
   })

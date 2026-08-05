@@ -1,5 +1,6 @@
 import { redis } from '../config/redis.js'
 import { env } from '../config/env.js'
+import { logger } from '../config/logger.js'
 
 /**
  * Get a cached value (auto JSON parse)
@@ -7,12 +8,17 @@ import { env } from '../config/env.js'
  * @returns {Promise<*|null>}
  */
 export async function cacheGet(key) {
-  const data = await redis.get(key)
-  if (!data) return null
   try {
-    return JSON.parse(data)
-  } catch {
-    return data
+    const data = await redis.get(key)
+    if (!data) return null
+    try {
+      return JSON.parse(data)
+    } catch {
+      return data
+    }
+  } catch (err) {
+    logger.warn({ err: err.message, key }, 'Redis cacheGet error, falling back')
+    return null
   }
 }
 
@@ -23,11 +29,15 @@ export async function cacheGet(key) {
  * @param {number} ttl - Time to live in seconds (default from env)
  */
 export async function cacheSet(key, value, ttl = env.REDIS_TTL_DEFAULT) {
-  const serialized = typeof value === 'string' ? value : JSON.stringify(value)
-  if (ttl) {
-    await redis.set(key, serialized, 'EX', ttl)
-  } else {
-    await redis.set(key, serialized)
+  try {
+    const serialized = typeof value === 'string' ? value : JSON.stringify(value)
+    if (ttl) {
+      await redis.set(key, serialized, 'EX', ttl)
+    } else {
+      await redis.set(key, serialized)
+    }
+  } catch (err) {
+    logger.warn({ err: err.message, key }, 'Redis cacheSet error')
   }
 }
 
@@ -36,7 +46,11 @@ export async function cacheSet(key, value, ttl = env.REDIS_TTL_DEFAULT) {
  * @param {string} key
  */
 export async function cacheDel(key) {
-  await redis.del(key)
+  try {
+    await redis.del(key)
+  } catch (err) {
+    logger.warn({ err: err.message, key }, 'Redis cacheDel error')
+  }
 }
 
 /**
@@ -44,12 +58,16 @@ export async function cacheDel(key) {
  * @param {string} pattern - e.g. 'products:list:*'
  */
 export async function cacheDeletePattern(pattern) {
-  let cursor = '0'
-  do {
-    const [nextCursor, keys] = await redis.scan(cursor, 'MATCH', pattern, 'COUNT', 100)
-    cursor = nextCursor
-    if (keys.length > 0) {
-      await redis.del(...keys)
-    }
-  } while (cursor !== '0')
+  try {
+    let cursor = '0'
+    do {
+      const [nextCursor, keys] = await redis.scan(cursor, 'MATCH', pattern, 'COUNT', 100)
+      cursor = nextCursor
+      if (keys.length > 0) {
+        await redis.del(...keys)
+      }
+    } while (cursor !== '0')
+  } catch (err) {
+    logger.warn({ err: err.message, pattern }, 'Redis cacheDeletePattern error')
+  }
 }

@@ -48,11 +48,12 @@ async function main() {
     const passwordHash = await bcrypt.hash(PASSWORD, 12)
 
     const { rows } = await client.query(
-      `INSERT INTO users (phone, email, name, role, role_id, password_hash, is_active, is_blocked)
-       VALUES ($1, $2, $3, 'ADMIN', $4, $5, true, false)
+      `INSERT INTO users (phone, email, name, role, role_id, platform_role, password_hash, is_active, is_blocked)
+       VALUES ($1, $2, $3, 'ADMIN', $4, 'SUPER_ADMIN', $5, true, false)
        ON CONFLICT (email) DO UPDATE SET
          role = 'ADMIN',
          role_id = EXCLUDED.role_id,
+         platform_role = EXCLUDED.platform_role,
          password_hash = EXCLUDED.password_hash,
          is_active = true,
          is_blocked = false,

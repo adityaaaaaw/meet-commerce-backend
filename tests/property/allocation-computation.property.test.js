@@ -65,7 +65,7 @@ const createdAtArb = fc
     min: new Date('2020-01-01T00:00:00.000Z'),
     max: new Date('2030-01-01T00:00:00.000Z'),
   })
-  .map((d) => d.toISOString())
+  .map((d) => (isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString()))
 
 // One shop entry: a single row that may be inserted into either or both arrays.
 //   - membership controls which arrays the shop appears in

@@ -541,7 +541,7 @@ export class SettlementService {
         'Per-order transaction recording failed (non-fatal)'
       )
     } finally {
-      client.release()
+      client?.release()
     }
   }
 

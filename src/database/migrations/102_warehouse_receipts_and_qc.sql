@@ -1,6 +1,30 @@
 -- Migration 102: Warehouse Receipts, Quality Control & Inspections
 -- Source of truth: Blueprint §06.4, Phase 5A
 
+-- 0. Warehouses and Zones (Pre-requisites)
+CREATE TABLE IF NOT EXISTS warehouses (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  code TEXT UNIQUE NOT NULL,
+  address TEXT NOT NULL,
+  city TEXT,
+  state TEXT,
+  pincode TEXT,
+  latitude NUMERIC(9,6),
+  longitude NUMERIC(9,6),
+  service_radius_km NUMERIC(8,2),
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS warehouse_zones (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  warehouse_id UUID NOT NULL REFERENCES warehouses(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  zone_type TEXT NOT NULL, -- RECEIVING | STORAGE_COLD | STORAGE_DRY | PACKING | DISPATCH
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- 1. Warehouse Receipts Table
 CREATE TABLE IF NOT EXISTS warehouse_receipts (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

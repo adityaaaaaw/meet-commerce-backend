@@ -118,8 +118,8 @@ describe('shop-transactions module bootstrap', () => {
     for (const t of CREDIT_TYPES) expect(DEBIT_TYPES.has(t)).toBe(false)
   })
 
-  it('lists exactly the four reference_type values per Req 7.10', () => {
-    expect(REFERENCE_TYPES).toEqual(['ORDER', 'PAYOUT', 'ADJUSTMENT', 'EXPENSE'])
+  it('lists reference_type values per Req 7.10', () => {
+    expect(REFERENCE_TYPES).toEqual(['ORDER', 'PAYOUT', 'ADJUSTMENT', 'EXPENSE', 'REFUND', 'COUPON', 'TAX'])
   })
 })
 

@@ -87,7 +87,7 @@ export class ShopsController {
       request.user.id,
       {
         ip: request.ip,
-        userAgent: request.headers['user-agent'] || null,
+        userAgent: request.headers?.['user-agent'] || null,
         actorRole:
           request.user?.platform_role ||
           request.user?.shopRole ||

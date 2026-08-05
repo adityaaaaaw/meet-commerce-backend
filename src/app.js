@@ -130,17 +130,20 @@ export const buildApp = async () => {
   })
 
   // Vendor KYC — Phase 2 Subsystem
-  await app.register(import('./modules/vendor-kyc/vendor-kyc.routes.js'), {
+  await app.register(import('./modules/vendors/vendor-kyc.routes.js'), {
     prefix: '/api/v1/vendor-kyc',
   })
 
   // Vendor Staff — Phase 2 Subsystem
-  await app.register(import('./modules/vendor-staff/vendor-staff.routes.js'), {
+  await app.register(import('./modules/vendors/vendor-staff.routes.js'), {
     prefix: '/api/v1/vendor-staff',
   })
 
   // Catalogue & Product Proposals — Phase 3 Subsystem
-  await app.register(import('./modules/catalogue/product-proposals.routes.js'), {
+  await app.register(import('./modules/catalogue/catalogue.routes.js'), {
+    prefix: '/api/v1/catalogue',
+  })
+  await app.register(import('./modules/catalogue/proposal-media.routes.js'), {
     prefix: '/api/v1/catalogue',
   })
 

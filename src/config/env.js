@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import dotenv from 'dotenv'
 
-dotenv.config()
+dotenv.config({ override: true })
 
 const booleanFromEnv = z.preprocess((value) => {
   if (typeof value === 'boolean') return value

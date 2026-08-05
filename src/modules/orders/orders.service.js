@@ -34,9 +34,65 @@ export class OrdersService {
    * @param {import('./orders.repository.js').OrdersRepository} repository
    * @param {import('../cart-quote/cart-quote.repository.js').CartQuoteRepository} quoteRepository
    */
-  constructor(repository, quoteRepository) {
+  constructor(repository, quoteRepository, deps = {}) {
     this.repository = repository
     this.quoteRepository = quoteRepository
+    this.storeStatusService = deps?.storeStatusService || null
+    this.deliveryCalendarService = deps?.deliveryCalendarService || null
+    this.paymentSettingsService = deps?.paymentSettingsService || deps?.configService || null
+    this.billSummaryService = deps?.billSummaryService || null
+  }
+
+  async _checkStoreOpenForAsap() {
+    if (!this.storeStatusService) return null
+    const res = await this.storeStatusService.isOpen()
+    if (res && res.isOpen === false) {
+      return { success: false, code: 'STORE_CLOSED_ASAP_UNAVAILABLE', message: 'Store is closed for ASAP orders' }
+    }
+    return null
+  }
+
+  async _resolveMaxScheduledAhead(now = new Date()) {
+    if (this.deliveryCalendarService) {
+      const maxDate = await this.deliveryCalendarService.getMaxGeneratedDate()
+      if (maxDate) return new Date(maxDate)
+    }
+    const ref = new Date(now)
+    return new Date(ref.getTime() + 7 * 24 * 60 * 60 * 1000)
+  }
+
+  async _checkPaymentMethodAllowed(userId, addressId, paymentMethod) {
+    if (!this.paymentSettingsService) return null
+    const config = this.paymentSettingsService.getConfig
+      ? await this.paymentSettingsService.getConfig()
+      : (this.paymentSettingsService.get ? await this.paymentSettingsService.get() : {})
+
+    if (paymentMethod === 'COD') {
+      if (config.codEnabled === false) {
+        return { success: false, code: 'COD_DISABLED', message: 'COD is disabled' }
+      }
+      if (this.billSummaryService) {
+        const summary = await this.billSummaryService.getBillSummary(userId, addressId)
+        const totalPayable = summary?.totalPayable ?? summary?.total_payable
+        const minAmount = config.codMinOrderAmount ?? config.minCodBill
+        const maxAmount = config.codMaxOrderAmount ?? config.maxCodBill
+        if (minAmount !== undefined && totalPayable < minAmount) {
+          return { success: false, code: 'COD_BELOW_MIN', message: `Bill total is below minimum ${minAmount} for COD` }
+        }
+        if (maxAmount !== undefined && totalPayable > maxAmount) {
+          return { success: false, code: 'COD_ABOVE_MAX', message: `Bill total exceeds maximum ${maxAmount} for COD` }
+        }
+      }
+    } else if (paymentMethod === 'ONLINE' || paymentMethod === 'RAZORPAY') {
+      if (config.razorpayEnabled === false) {
+        return { success: false, code: 'RAZORPAY_DISABLED', message: 'Online payments disabled' }
+      }
+    } else if (paymentMethod === 'WALLET') {
+      if (config.walletEnabled === false) {
+        return { success: false, code: 'WALLET_DISABLED', message: 'Wallet payments disabled' }
+      }
+    }
+    return null
   }
 
   validateStateTransition(currentStatus, nextStatus) {
@@ -74,7 +130,7 @@ export class OrdersService {
       throw err
     }
 
-    const orderNumber = `ORD-${Date.now()}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`
+    const orderNumber = `ORD-${String(Date.now()).slice(-8)}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`
     const order = await this.repository.createOrder({
       order_number: orderNumber,
       quote_id: quote.id,
@@ -189,5 +245,38 @@ export class OrdersService {
 
   async listOrders(params = {}) {
     return this.repository.listOrders(params.customerId, params.warehouseId, params.status)
+  }
+
+  async getInvoice(userId, orderId) {
+    const order = this.repository.findById
+      ? await this.repository.findById(orderId)
+      : await this.repository.findOrderById(orderId)
+
+    if (!order) {
+      return { success: false, statusCode: 404, message: 'Order not found' }
+    }
+
+    const ownerId = order.userId || order.customer_id || order.user_id
+    if (ownerId !== userId) {
+      return { success: false, statusCode: 403, message: 'Access denied' }
+    }
+
+    const paymentStatus = order.paymentStatus || order.payment_status
+    if (paymentStatus !== 'PAID') {
+      return { success: false, statusCode: 400, message: 'Invoice available only for paid orders' }
+    }
+
+    const timeline = this.repository.getStatusHistory
+      ? await this.repository.getStatusHistory(orderId)
+      : (order.status_history || [])
+
+    const { generateInvoicePDF } = await import('../../utils/invoiceGenerator.js')
+    const buffer = await generateInvoicePDF(order, timeline)
+
+    return {
+      success: true,
+      orderNumber: order.orderNumber || order.order_number,
+      buffer,
+    }
   }
 }

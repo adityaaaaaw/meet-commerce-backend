@@ -265,7 +265,8 @@ describe('ShopsController.update()', () => {
     expect(service.update).toHaveBeenCalledWith(
       SHOP_ID,
       { phone: '9999999999' },
-      USER_ID
+      USER_ID,
+      expect.anything()
     )
     expect(reply.code).toHaveBeenCalledWith(200)
     expect(reply.body).toMatchObject({ success: true, data: MOCK_SHOP })

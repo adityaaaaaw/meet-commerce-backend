@@ -86,6 +86,7 @@ const CANONICAL_PERMISSION_LIST = Object.freeze([
   'procurement.respond',
   'procurement.update',
   'procurement.view',
+  'procurement.approve',
   'product_proposals.approve',
   'product_proposals.create',
   'product_proposals.reject',
@@ -94,12 +95,16 @@ const CANONICAL_PERMISSION_LIST = Object.freeze([
   'quality_control.decide',
   'quality_control.override',
   'quality_control.view',
+  'quality_control.inspect',
+  'quality_control.approve',
   'recalls.activate',
   'recalls.close',
   'recalls.create',
   'recalls.view',
+  'recalls.manage',
   'reports.quality_view',
   'reports.traceability_view',
+  'traceability.view',
   'supply_batches.create',
   'supply_batches.dispatch',
   'supply_batches.handover',
@@ -110,6 +115,7 @@ const CANONICAL_PERMISSION_LIST = Object.freeze([
   'support_tickets.replace',
   'support_tickets.update',
   'support_tickets.view',
+  'support.manage',
   'vendor_documents.verify',
   'vendor_documents.view',
   'vendor_staff.create',
@@ -128,6 +134,19 @@ const CANONICAL_PERMISSION_LIST = Object.freeze([
   'warehouses.create',
   'warehouses.update',
   'warehouses.view',
+  // ── Inventory ──────────────────────────────────────────────────────────
+  'inventory.manage',
+  'inventory.reserve',
+  'inventory.view',
+  // ── Delivery & Logistics ───────────────────────────────────────────────
+  'deliveries.manage',
+  'deliveries.view',
+  'fulfilment.manage',
+  'riders.manage',
+  // ── Orders ────────────────────────────────────────────────────────────
+  'orders.update',
+  // ── Reports ────────────────────────────────────────────────────────────
+  'reports.view',
 ])
 
 /**

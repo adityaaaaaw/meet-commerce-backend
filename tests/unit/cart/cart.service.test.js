@@ -486,7 +486,7 @@ describe('CartService.updateItem — lookup by (productId, shopId)', () => {
     const result = await svc.updateItem(USER_ID, PROD_1, 5)
 
     expect(result.success).toBe(false)
-    expect(result.code).toBe('CART_SHOP_REQUIRED')
+    expect(result.code).toBe('CART_ITEM_AMBIGUOUS')
     expect(repo.saveCart).not.toHaveBeenCalled()
   })
 

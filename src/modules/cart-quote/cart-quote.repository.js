@@ -23,7 +23,7 @@ export class CartQuoteRepository {
   async getCartWithItems(customerId) {
     const cart = await this.findOrCreateCart(customerId)
     const itemsRes = await query(
-      `SELECT ci.*, p.name AS product_name, p.status AS product_status
+      `SELECT ci.*, p.name AS product_name, p.is_active AS product_is_active
          FROM cart_items ci
          JOIN products p ON p.id = ci.product_id
         WHERE ci.cart_id = $1
