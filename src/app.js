@@ -124,6 +124,61 @@ export const buildApp = async () => {
     prefix: '/api/v1/orders',
   })
 
+  // Vendors — Phase 2 Subsystem
+  await app.register(import('./modules/vendors/vendors.routes.js'), {
+    prefix: '/api/v1/vendors',
+  })
+
+  // Vendor KYC — Phase 2 Subsystem
+  await app.register(import('./modules/vendor-kyc/vendor-kyc.routes.js'), {
+    prefix: '/api/v1/vendor-kyc',
+  })
+
+  // Vendor Staff — Phase 2 Subsystem
+  await app.register(import('./modules/vendor-staff/vendor-staff.routes.js'), {
+    prefix: '/api/v1/vendor-staff',
+  })
+
+  // Catalogue & Product Proposals — Phase 3 Subsystem
+  await app.register(import('./modules/catalogue/product-proposals.routes.js'), {
+    prefix: '/api/v1/catalogue',
+  })
+
+  // Procurement — Phase 4 Subsystem
+  await app.register(import('./modules/procurement/procurement.routes.js'), {
+    prefix: '/api/v1/procurement',
+  })
+
+  // Warehouse Receipts & Quality Control — Phase 5 Subsystem
+  await app.register(import('./modules/warehouse-receipts/warehouse-receipts.routes.js'), {
+    prefix: '/api/v1/warehouse-receipts',
+  })
+
+  // Lot Inventory & FEFO Allocation — Phase 6 Subsystem
+  await app.register(import('./modules/inventory/inventory.routes.js'), {
+    prefix: '/api/v1/inventory',
+  })
+
+  // Cart, Loyalty & Quote Engine — Phase 7 Subsystem
+  await app.register(import('./modules/cart-quote/cart-quote.routes.js'), {
+    prefix: '/api/v1/cart-quote',
+  })
+
+  // Rider Shifts & Deliveries Adaptation — Phase 9 Subsystem
+  await app.register(import('./modules/deliveries/deliveries.routes.js'), {
+    prefix: '/api/v1/deliveries',
+  })
+
+  // Support Tickets, Recalls & Traceability — Phase 10 Subsystem
+  await app.register(import('./modules/support/support.routes.js'), {
+    prefix: '/api/v1/support',
+  })
+
+  // Admin Reports & Dashboards — Phase 11 Subsystem
+  await app.register(import('./modules/reports/reports.routes.js'), {
+    prefix: '/api/v1/reports',
+  })
+
   // Payments — fully implemented
   await app.register(import('./modules/payments/payments.routes.js'), {
     prefix: '/api/v1/payments',
