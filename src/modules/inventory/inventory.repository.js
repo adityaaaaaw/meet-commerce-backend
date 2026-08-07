@@ -38,28 +38,62 @@ export class InventoryRepository {
 
   /**
    * Find available non-expired inventory lots ordered by FEFO (First Expiry First Out)
+   * Spec §7.8.2, §11.11.6, §11.11.7
+   *
    * @param {string} warehouseId
    * @param {string} productId
+   * @param {object} [client] - DB transaction client for row locking
    * @returns {Promise<Array>}
    */
-  async findAvailableLotsFefo(warehouseId, productId) {
-    const { rows } = await query(
+  async findAvailableLotsFefo(warehouseId, productId, client = null) {
+    const dbClient = client || { query: (sql, params) => query(sql, params) }
+    const { rows } = await dbClient.query(
       `SELECT * FROM inventory_lots
         WHERE warehouse_id = $1
           AND product_id = $2
+          AND state = 'AVAILABLE'
           AND expiry_date > CURRENT_DATE
           AND (quantity_on_hand - quantity_reserved) > 0
-        ORDER BY expiry_date ASC, created_at ASC`,
+        ORDER BY expiry_date ASC, created_at ASC
+        FOR UPDATE SKIP LOCKED`,
       [warehouseId, productId]
     )
     return rows
   }
 
-  async updateLotQuantities(lotId, onHandChange, reservedChange) {
-    const { rows } = await query(
+  /**
+   * Atomic quantity guard update for inventory lot reservation
+   * Spec §5.4.1, §7.8.2, §7.8.5
+   *
+   * @param {string} lotId
+   * @param {number} deltaReserved
+   * @param {object} [client] - DB transaction client
+   * @returns {Promise<object|null>}
+   */
+  async reserveLotQuantityGuard(lotId, deltaReserved, client = null) {
+    const dbClient = client || { query: (sql, params) => query(sql, params) }
+    const { rows } = await dbClient.query(
+      `UPDATE inventory_lots
+          SET quantity_reserved = quantity_reserved + $2,
+              version = version + 1,
+              updated_at = NOW()
+        WHERE id = $1
+          AND state = 'AVAILABLE'
+          AND (quantity_on_hand - quantity_reserved) >= $2
+        RETURNING *`,
+      [lotId, deltaReserved]
+    )
+    return rows[0] || null
+  }
+
+  async updateLotQuantities(lotId, onHandChange, reservedChange, client = null) {
+    const dbClient = client || { query: (sql, params) => query(sql, params) }
+    const { rows } = await dbClient.query(
       `UPDATE inventory_lots
           SET quantity_on_hand = quantity_on_hand + $2,
-              quantity_reserved = quantity_reserved + $3
+              quantity_reserved = quantity_reserved + $3,
+              version = version + 1,
+              updated_at = NOW()
         WHERE id = $1
         RETURNING *`,
       [lotId, onHandChange, reservedChange]

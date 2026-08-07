@@ -188,11 +188,37 @@ async function socketioPlugin(fastify) {
       })
     }
 
-    // ─── ORDER TRACKING ──────────────────────────────
-    socket.on('order:track', (orderId) => {
-      if (orderId) {
-        socket.join(`order:${orderId}`)
-        logger.debug({ userId, orderId }, 'Joined order tracking room')
+    // ─── ORDER TRACKING (Spec §7.15.2, §11.44.1) ──────────────────────
+    // Remove arbitrary order:track join without authorization.
+    // Authorize every room join through DB object policy.
+    socket.on('order:track', async (orderId) => {
+      if (!orderId) return
+      try {
+        if (platform_role || role === 'ADMIN') {
+          socket.join(`order:${orderId}`)
+          logger.debug({ userId, orderId }, 'HQ/Admin joined order tracking room')
+          return
+        }
+
+        // DB check for order ownership or rider assignment
+        const { rows } = await query(
+          `SELECT o.id
+             FROM orders o
+             LEFT JOIN delivery_assignments da ON da.order_id = o.id AND da.rider_id = $2
+            WHERE o.id = $1 AND (o.customer_id = $2 OR da.id IS NOT NULL)
+            LIMIT 1`,
+          [orderId, userId]
+        )
+
+        if (rows.length > 0) {
+          socket.join(`order:${orderId}`)
+          logger.debug({ userId, orderId }, 'Authorized user joined order tracking room')
+        } else {
+          logger.warn({ userId, orderId }, 'Unauthorized attempt to join order tracking room rejected')
+          socket.emit('error', { code: 'UNAUTHORIZED_ROOM_JOIN', message: 'Unauthorized room join attempt' })
+        }
+      } catch (err) {
+        logger.error({ err, userId, orderId }, 'Failed to authorize order tracking room join')
       }
     })
 

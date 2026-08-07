@@ -42,8 +42,9 @@ export const buildApp = async () => {
   await app.register(import('./plugins/auth.plugin.js'))
   await app.register(import('./plugins/swagger.plugin.js'))
   await app.register(import('./plugins/multipart.plugin.js'))
-  await app.register(import('./plugins/compress.plugin.js'))
-  await app.register(import('./plugins/socketio.plugin.js'))
+  if (process.env.DISABLE_SOCKETIO !== 'true') {
+    await app.register(import('./plugins/socketio.plugin.js'))
+  }
 
   // ─── GLOBAL HOOKS ──────────────────────────────────────
   app.addHook('onRequest', sanitize)

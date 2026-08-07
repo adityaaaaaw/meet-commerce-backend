@@ -99,6 +99,21 @@ export class PaymentsRepository {
   }
 
   /**
+   * Record webhook event in payment_webhook_events table
+   * Spec §5.4.2, §7.10.2, §11.15.5
+   */
+  async recordWebhookEvent({ provider = 'RAZORPAY', providerEventId, eventType, payloadHash, signatureValid = true, processingStatus = 'COMPLETED', lastError = null }) {
+    const { rows } = await query(
+      `INSERT INTO payment_webhook_events (provider, provider_event_id, event_type, payload_hash, signature_valid, processing_status, last_error, processed_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+       ON CONFLICT (provider, provider_event_id) DO NOTHING
+       RETURNING *`,
+      [provider, providerEventId, eventType, payloadHash, signatureValid, processingStatus, lastError]
+    )
+    return rows[0] ? rows[0] : null
+  }
+
+  /**
    * Update refund fields
    */
   async updateRefund(id, refundData) {
